@@ -214,7 +214,7 @@ def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,
     sfx_labels = []
     for k, s in enumerate(valid_sfx):
         delay_ms = int(s["start"] * 1000)
-        vol = s.get("volume", 0.8)
+        vol = s.get("volume", 0.3)
         label = f"sfx{k}"
         filter_parts.append(f"[{k + 2}:a]volume={vol:.3f},adelay={delay_ms}|{delay_ms}[{label}]")
         sfx_labels.append(f"[{label}]")
@@ -246,7 +246,7 @@ def mix_sfx_only(video_path: Path, output_path: Path, sfx_entries: list):
     sfx_labels = []
     for k, s in enumerate(valid_sfx):
         delay_ms = int(s["start"] * 1000)
-        vol = s.get("volume", 0.8)
+        vol = s.get("volume", 0.3)
         label = f"sfx{k}"
         filter_parts.append(f"[{k + 1}:a]volume={vol:.3f},adelay={delay_ms}|{delay_ms}[{label}]")
         sfx_labels.append(f"[{label}]")
@@ -466,14 +466,14 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
                     sfx_entries.append({
                         "path": str(SOUND_DIR / cl["sfx"]),
                         "start": t,
-                        "volume": (cl.get("sfx_volume") or 80) / 100,
+                        "volume": (cl.get("sfx_volume") or 30) / 100,
                     })
                 t += cl.get("duration", 0)
         elif c.get("sfx"):
             sfx_entries.append({
                 "path": str(SOUND_DIR / c["sfx"]),
                 "start": c["start"],
-                "volume": (c.get("sfx_volume") or 80) / 100,
+                "volume": (c.get("sfx_volume") or 30) / 100,
             })
 
     # ユニット結合のキャッシュ: SFXのみの変更など、ユニットが一切変わっていない場合は

@@ -658,7 +658,7 @@ function sfxRowHtml(card, i) {
     ? (soundFiles.find(s => s.path === card.sfx)?.name ?? '効果音なし')
     : '🔇 効果音なし';
   const hassfx = !!card.sfx;
-  const vol = card.sfx_volume ?? 80;
+  const vol = card.sfx_volume ?? 30;
 
   const noneItem = `<div class="sfx-none-row">
     <div class="sfx-item ${!hassfx ? 'active' : ''}" onclick="setSfxAndClose(${i},'')">
@@ -750,7 +750,7 @@ function clipSfxRowHtml(card, i, k) {
     ? (soundFiles.find(s => s.path === clip.sfx)?.name ?? '効果音なし')
     : '🔇 効果音なし';
   const hassfx = !!clip.sfx;
-  const vol = clip.sfx_volume ?? 80;
+  const vol = clip.sfx_volume ?? 30;
 
   const noneItem = `<div class="sfx-none-row">
     <div class="sfx-item ${!hassfx ? 'active' : ''}" onclick="setClipSfxAndClose(${i},${k},'')">
@@ -819,7 +819,7 @@ let sfxAudio = null;
 function previewSfx(path, vol) {
   if (sfxAudio) { sfxAudio.pause(); sfxAudio = null; }
   sfxAudio = new Audio('/api/sound?file=' + encodeURIComponent(path));
-  sfxAudio.volume = Math.min(1, (vol ?? 80) / 100);
+  sfxAudio.volume = Math.min(1, (vol ?? 30) / 100);
   sfxAudio.play();
 }
 

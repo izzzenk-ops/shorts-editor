@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ショート動画エディタ</title>
+<style>
+  :root {
+    --bg: #121214;
+    --surface: #1a1a1d;
+    --surface-2: #202024;
+    --surface-3: #26262b;
+    --surface-4: #2e2e35;
+    --border: #2c2c31;
+    --border-soft: #232327;
+    --border-strong: #3d3d45;
+    --text: #e9e9ec;
+    --text-muted: #9a9aa2;
+    --text-faint: #62626a;
+    --accent: #5b8def;
+    --accent-hover: #4a7ade;
+    --accent-soft: rgba(91, 141, 239, 0.14);
+    --danger: #e0626c;
+    --danger-soft: rgba(224, 98, 108, 0.12);
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 16px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Hiragino Sans", sans-serif;
+    display: flex;
+    height: 100vh;
+    overflow: hidden;
+    letter-spacing: 0.01em;
+  }
+
+  /* ── 左パネル ──────────────────────────── */
+  #leftPanel {
+    width: 380px;
+    flex-shrink: 0;
+    background: var(--bg);
+    border-right: 1px solid var(--border-soft);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px;
+    overflow: hidden;
+    height: 100vh;
+  }
+  #leftPanel > *:not(#videoWrap) {
+    align-self: stretch;
+  }
+  #totalDuration {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 14px;
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+  #totalDuration .value {
+    font-size: 17px;
+    font-weight: 600;
+    color: var(--text);
+    margin-left: 6px;
+    letter-spacing: 0;
+  }
+  #videoWrap {
+    position: relative;
+    flex-shrink: 0;
+    width: min(100%, calc((100vh - 220px) * 9 / 16));
+    aspect-ratio: 9 / 16;
+    margin: 0 auto;
+    background: #000;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    cursor: pointer;
+    border: 1px solid var(--border);
+  }
+  #previewVideo {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  #playIcon {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 44px;
+    color: rgba(255,255,255,0.9);
+    pointer-events: none;
+    text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  }
+  #playIcon.hidden { display: none; }
+
+  .title-input {
+    width: 100%;
+    background: #f3f3f4;
+    color: #1a1a1d;
+    border: 1px solid #c8c8cc;
+    border-radius: var(--radius-sm);
+    padding: 7px 9px;
+    font-size: 14px;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .title-input:focus { outline: none; border-color: var(--accent); }
+  .title-typewriter-toggle {
+    font-size: 12px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 5px;
+  }
+  .title-typewriter-toggle input[type=checkbox] { accent-color: var(--accent); }
+
+  .actions {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  button {
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    background: var(--surface-3);
+    border-radius: var(--radius-sm);
+    padding: 9px 14px;
+    cursor: pointer;
+    color: var(--text);
+    transition: background-color 0.12s ease, border-color 0.12s ease;
+  }
+  button:hover { background: var(--surface-4); border-color: #4d4d56; }
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+  .btn-danger {
+    background: transparent;
+    border-color: transparent;
+    color: var(--danger);
+  }
+  .btn-danger:hover { background: var(--danger-soft); border-color: var(--danger-soft); }
+  .btn-accent-outline {
+    background: transparent;
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+  .btn-accent-outline:hover { background: var(--accent-soft); }
+  .btn-blue {
+    background: #1a6fdb;
+    border-color: #1a6fdb;
+    color: #fff;
+    font-weight: 700;
+    font-size: 14px;
+    padding: 12px 14px;
+    letter-spacing: 0.02em;
+  }
+  .btn-blue:hover { background: #1559b8; border-color: #1559b8; }
+  button:disabled { opacity: 0.45; cursor: default; }
+  #status { font-size: 12px; color: var(--text-muted); margin-top: 10px; min-height: 16px; }
+
+  /* ── 右パネル全体 ──────────────────────── */
+  #rightPanel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  #rightHeader {
+    flex-shrink: 0;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border-soft);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    background: var(--surface);
+  }
+  .right-title-area {
+    flex: 1;
+    min-width: 0;
+  }
+  .right-title-area > label {
+    display: block;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  /* ── カード一覧 ──────────────────────── */
+  #cardPanel {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: var(--bg);
+  }
+  .card {
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    margin-bottom: 12px;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 12px;
+    color: var(--text-faint);
+    margin-bottom: 8px;
+  }
+  .card-num {
+    display: inline-block;
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+    background: #1a6fdb;
+    border-radius: 5px;
+    padding: 2px 9px;
+    font-size: 13px;
+    text-decoration: none !important;
+  }
+  .card-num:hover { background: #1559b8; }
+  .card-text {
+    width: 50%;
+    background: #f3f3f4;
+    color: #1a1a1d;
+    border: 1px solid #c8c8cc;
+    border-radius: var(--radius-sm);
+    padding: 7px 9px;
+    font-size: 14px;
+    resize: none;
+    font-family: inherit;
+    overflow: hidden;
+    line-height: 1.5;
+  }
+  .card-text:focus { outline: none; border-color: var(--accent); }
+  .clip-row {
+    margin-top: 8px;
+    display: flex;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .clip-thumb-md {
+    width: 130px;
+    aspect-ratio: 9 / 16;
+    flex-shrink: 0;
+    object-fit: cover;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: #000;
+    cursor: pointer;
+  }
+  .clip-info {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+    word-break: break-all;
+  }
+  .clip-actions {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+  .clip-actions .card-foot { margin-top: auto; }
+  .clip-actions-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .clip-actions-buttons button { font-size: 13px; padding: 9px 14px; }
+  .clip-actions-buttons select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    padding: 9px;
+  }
+  .trim-row {
+    display: none;
+    align-items: center;
+    gap: 10px;
+  }
+  .trim-row.open { display: flex; }
+  .trim-row input[type=range] {
+    flex: 1;
+    accent-color: var(--accent);
+  }
+  .trim-row span { font-size: 11px; color: var(--text-muted); min-width: 70px; }
+
+  .clip-block {
+    border: 1px solid var(--border-soft);
+    border-radius: var(--radius-sm);
+    padding: 10px;
+    margin-top: 8px;
+    background: var(--surface-2);
+  }
+  .clip-block .cut-label {
+    display: inline-block;
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 600;
+    background: var(--surface-3);
+    border-radius: 4px;
+    padding: 1px 6px;
+    margin-bottom: 6px;
+    letter-spacing: 0.03em;
+  }
+  .card-foot {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: center;
+  }
+  .card-foot button, .card-foot select { font-size: 13px; padding: 9px 14px; }
+  .card-foot select {
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  }
+  .card-foot .btn-danger { margin-left: auto; }
+  .note { font-size: 11px; color: var(--text-faint); margin-top: 8px; line-height: 1.5; }
+  .zoom-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .btn-zoom { font-size: 12px; padding: 4px 10px; border-radius: var(--radius-sm);
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    color: var(--text-muted); cursor: pointer; white-space: nowrap; }
+  .btn-zoom.active { background: #1a3a2a; border-color: #2a6a4a; color: #6fcf97; }
+  .zoom-vol { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 11px; color: var(--text-muted); }
+  .zoom-vol input[type=range] { width: 70px; accent-color: var(--accent); }
+  .zoom-vol input[type=number] { width: 44px; font-size: 11px; padding: 2px 4px; text-align: right;
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); color: var(--text); font-family: inherit; }
+
+  .sfx-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+  .sfx-row button { font-size: 12px; padding: 5px 10px; white-space: nowrap; }
+
+  /* カスタム効果音ピッカー */
+  .sfx-picker { position: relative; width: 200px; flex-shrink: 0; }
+  .sfx-trigger {
+    display: flex; align-items: center; justify-content: space-between; gap: 4px;
+    padding: 5px 8px; font-size: 12px; cursor: pointer; user-select: none;
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); color: var(--text);
+  }
+  .sfx-trigger-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; min-width: 0; }
+  .sfx-dropdown {
+    position: fixed; top: 0; left: 0;
+    width: 780px; max-height: 360px; overflow-y: auto;
+    background: var(--surface-2); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md); z-index: 1000;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.6);
+    display: none;
+  }
+  .sfx-dropdown.open { display: block; }
+  .sfx-group-label {
+    padding: 6px 10px 3px; font-size: 11px; color: var(--text-faint);
+    grid-column: 1 / -1;
+  }
+  .sfx-items-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    padding: 2px 6px 6px;
+  }
+  .sfx-none-row { padding: 6px 10px 4px; }
+  .sfx-item {
+    display: flex; align-items: center; gap: 5px;
+    padding: 4px 6px; cursor: pointer; font-size: 12px;
+    border-radius: var(--radius-sm);
+  }
+  .sfx-item:hover { background: var(--surface-3); }
+  .sfx-item.active { color: var(--accent); }
+  .sfx-play-btn {
+    flex-shrink: 0; font-size: 10px; padding: 2px 5px;
+    background: var(--surface-4); border: 1px solid var(--border-strong);
+    border-radius: 4px; cursor: pointer; color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .sfx-play-btn:hover { background: var(--accent-soft); color: var(--accent); border-color: var(--accent); }
+  .sfx-item-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sfx-vol { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 11px; color: var(--text-muted); }
+  .sfx-vol input[type=range] { width: 70px; accent-color: var(--accent); }
+  .sfx-vol input[type=number] { width: 44px; font-size: 11px; padding: 2px 4px; text-align: right;
+    background: var(--surface-3); border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); color: var(--text); font-family: inherit; }
+
+  .undo-toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--surface-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 10px 12px 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 13px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    z-index: 50;
+  }
+  .undo-toast.hidden { display: none; }
+  .undo-toast button { padding: 6px 12px; }
+</style>
+</head>
+<body>
+
+<div id="leftPanel">
+  <div id="totalDuration">想定再生時間<span class="value">--</span></div>
+  <div id="videoWrap">
+    <video id="previewVideo" playsinline></video>
+    <div id="playIcon">▶</div>
+  </div>
+  <div id="status"></div>
+  <div id="render-status" style="display:none;font-size:16px;font-weight:600;margin-bottom:6px;"></div>
+  <div class="actions">
+    <button class="btn-accent-outline" id="renderBtn" onclick="renderFinal()">今すぐ更新する</button>
+    <button class="btn-accent-outline" onclick="showFinal()">完成版を確認</button>
+  </div>
+</div>
+
+<div id="rightPanel">
+  <div id="rightHeader">
+    <div class="right-title-area">
+      <label>タイトル（カード1に重ねて表示・任意）</label>
+      <input type="text" id="panelTitleInput" class="title-input"
+             placeholder="未入力ならカード1は通常のテロップのみ"
+             oninput="onPanelTitleInput(this)" onchange="autosave()">
+      <label class="title-typewriter-toggle">
+        <input type="checkbox" id="panelTitleTypewriter" checked
+               onchange="onPanelTitleTypewriterChange(this)"> 2行目をタイプライター表示
+      </label>
+    </div>
+    <button class="btn-blue" style="white-space:nowrap;flex-shrink:0" onclick="exportReel()">⬇ 動画出力</button>
+  </div>
+  <div id="cardPanel"></div>
+</div>
+
+<div id="undoToast" class="undo-toast hidden">
+  <span>カードを削除しました</span>
+  <button class="btn-accent-outline" onclick="undoDeleteCard()">↩ 元に戻す</button>
+</div>
+
+<script>
+let cards = [];
+let materials = [];
+let playUntil = null;
+let currentPlayingFile = null;
+let showingFinal = false;
+let voiceoverEnd = 0;
+
+let soundFiles = [];
+
+async function loadAll() {
+  const [timeline, materialsRes, soundsRes] = await Promise.all([
+    fetch('/api/timeline').then(r => r.json()),
+    fetch('/api/materials').then(r => r.json()),
+    fetch('/api/sounds').then(r => r.json()),
+  ]);
+  soundFiles = soundsRes;
+  cards = timeline.cards;
+  voiceoverEnd = timeline.voiceover_duration ?? (cards[cards.length - 1]?.end ?? 0);
+  // 後方互換: 旧形式 card.clip(単一) を card.clips(リスト) に正規化
+  // さらにカードレベルの sfx/sfx_volume をクリップレベルに移行
+  cards.forEach(c => {
+    if (!c.clips) c.clips = c.clip ? [c.clip] : [];
+    delete c.clip;
+    if (c.sfx && c.clips.length > 0 && !c.clips.some(cl => cl.sfx)) {
+      c.clips[0].sfx = c.sfx;
+      c.clips[0].sfx_volume = c.sfx_volume;
+    }
+    delete c.sfx;
+    delete c.sfx_volume;
+  });
+  // 左パネルのタイトル欄をカード1のデータで初期化
+  if (cards.length > 0) {
+    document.getElementById('panelTitleInput').value = cards[0].title || '';
+    document.getElementById('panelTitleTypewriter').checked = cards[0].title_typewriter !== false;
+  }
+  materials = materialsRes.clips.sort((a, b) => a.sequence_no - b.sequence_no);
+  renderCards();
+  updateTotalDuration();
+}
+
+function fmtTime(sec) {
+  const m = Math.floor(sec / 60);
+  const s = (sec % 60).toFixed(1);
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+}
+
+function updateTotalDuration() {
+  const total = cards.length ? cards[cards.length - 1].end : 0;
+  document.getElementById('totalDuration').innerHTML = `想定再生時間<span class="value">${fmtTime(total)}</span><span class="value" style="margin-left:12px">${cards.length}カット</span>`;
+}
+
+function clipFullDuration(filename) {
+  const m = materials.find(m => m.file === filename);
+  return m ? m.duration : 0;
+}
+
+function cardFootHtml(card, i, tagFilter) {
+  return `
+    <div class="card-foot">
+      <button onclick="addCut(${i})">＋ カット追加</button>
+      <select id="tagSelect-${i}">
+        <option value="either" ${tagFilter === 'either' ? 'selected' : ''}>どちらでも</option>
+        <option value="person" ${tagFilter === 'person' ? 'selected' : ''}>人物</option>
+        <option value="landscape" ${tagFilter === 'landscape' ? 'selected' : ''}>風景</option>
+      </select>
+      <button onclick="reassignByTag(${i})">タグで再選定</button>
+      <button class="btn-danger" onclick="deleteCard(${i})">🗑 カード削除</button>
+    </div>`;
+}
+
+function clipBlockHtml(card, i, k, footHtml) {
+  const clip = card.clips[k];
+  const fullDur = clipFullDuration(clip.file);
+  const maxIn = Math.max(0, fullDur - (clip.duration || 0));
+  const multi = card.clips.length > 1;
+  const fileOptions = materials.map(m =>
+    `<option value="${m.file}" ${m.file === clip.file ? 'selected' : ''}>${m.file}</option>`
+  ).join('');
+
+  return `
+    <div class="clip-block">
+      ${multi ? `<div class="cut-label">カット${k + 1} / ${card.clips.length}</div>` : ''}
+      <div class="clip-row">
+        <img class="clip-thumb-md" src="/api/frame?clip=${encodeURIComponent(clip.file)}&n=0"
+             title="クリックで左に再生" onclick="playSub(${i},${k})">
+        <div class="clip-actions">
+          <div class="clip-info" id="clipinfo-${i}-${k}">
+            ${clip.file} @${(clip.in || 0).toFixed(2)}s, ${(clip.duration || 0).toFixed(2)}s
+          </div>
+          <div class="clip-actions-buttons">
+            <button onclick="playCardFinal(${i})">▶ 再生</button>
+            <button onclick="toggleTrim(${i},${k})">✂️ トリム</button>
+            <button onclick="swapSub(${i},${k})">🔄 別素材</button>
+            <select onchange="selectFileSub(${i},${k},this.value)">${fileOptions}</select>
+            ${multi ? `<button class="btn-danger" onclick="deleteCut(${i},${k})">🗑 カット削除</button>` : ''}
+          </div>
+          <div class="trim-row" id="trim-${i}-${k}">
+            <span>in: ${(clip.in || 0).toFixed(2)}s</span>
+            <input type="range" min="0" max="${maxIn.toFixed(2)}" step="0.05"
+                   value="${(clip.in || 0).toFixed(2)}"
+                   oninput="onTrimInput(${i},${k},this)"
+                   onchange="autosave()">
+          </div>
+          ${clipSfxRowHtml(card, i, k)}
+          ${footHtml || ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderCards() {
+  const panel = document.getElementById('cardPanel');
+  panel.innerHTML = '';
+
+  cards.forEach((card, i) => {
+    const div = document.createElement('div');
+    div.className = 'card';
+    div.id = `card-${i}`;
+    const tagFilter = card.tag_filter || 'either';
+    const singleClip = card.clips.length === 1;
+    const footHtml = cardFootHtml(card, i, tagFilter);
+
+    const blocks = card.clips.map((_, k) =>
+      clipBlockHtml(card, i, k, singleClip ? footHtml : '')
+    ).join('');
+
+    div.innerHTML = `
+      <div class="card-header">
+        <span class="card-num"
+              onclick="seekFinal(${i})" title="完成版プレビューをこのカードの位置から再生">カット${card.id}</span>
+        <span>${card.start.toFixed(2)}s 〜 ${card.end.toFixed(2)}s</span>
+        <span>${(card.end - card.start).toFixed(2)}s</span>
+        <span>${card.text.length}字</span>
+      </div>
+      <textarea class="card-text" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
+        title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
+      ${blocks || '<div class="clip-info">(未割当て)</div>'}
+      ${singleClip ? '' : footHtml}
+      ${zoomRowHtml(card, i)}
+    `;
+    panel.appendChild(div);
+  });
+  panel.querySelectorAll('.card-text').forEach(autoResize);
+}
+
+function autoResize(ta) {
+  ta.style.height = 'auto';
+  ta.style.height = ta.scrollHeight + 'px';
+}
+
+function onTextInput(i, ta) {
+  cards[i].text = ta.value;
+  autoResize(ta);
+}
+
+function zoomRowHtml(card, i) {
+  const on = !!card.zoom;
+  const lv = card.zoom_level ?? 20;
+  return `<div class="zoom-row">
+    <button class="btn-zoom ${on ? 'active' : ''}" onclick="toggleZoom(${i})">🔍 ズーム ${on ? 'ON' : 'OFF'}</button>
+    ${on ? `<span class="zoom-vol">倍率
+      <input type="range" min="5" max="50" value="${lv}"
+        oninput="setZoomLevel(${i},this.value,this.parentNode.querySelector('.zoom-num'),null)"
+        onchange="autosave()">
+      <input type="number" class="zoom-num" min="5" max="50" value="${lv}"
+        oninput="setZoomLevel(${i},this.value,null,this.parentNode.querySelector('input[type=range]'))"
+        onchange="autosave()">%
+    </span>` : ''}
+  </div>`;
+}
+
+function toggleZoom(i) {
+  cards[i].zoom = !cards[i].zoom;
+  if (!cards[i].zoom) delete cards[i].zoom_level;
+  markDirty();
+  autosave();
+  renderCards();
+}
+
+function setZoomLevel(i, val, numEl, rangeEl) {
+  const v = Math.max(5, Math.min(50, Number(val)));
+  cards[i].zoom_level = v;
+  if (numEl) numEl.value = v;
+  if (rangeEl) rangeEl.value = v;
+  markDirty();
+}
+
+function sfxRowHtml(card, i) {
+  const cats = [...new Set(soundFiles.map(s => s.category))];
+  const currentLabel = card.sfx
+    ? (soundFiles.find(s => s.path === card.sfx)?.name ?? '効果音なし')
+    : '🔇 効果音なし';
+  const hassfx = !!card.sfx;
+  const vol = card.sfx_volume ?? 80;
+
+  const noneItem = `<div class="sfx-none-row">
+    <div class="sfx-item ${!hassfx ? 'active' : ''}" onclick="setSfxAndClose(${i},'')">
+      <span class="sfx-item-name">🔇 効果音なし</span>
+    </div>
+  </div>`;
+  const catItems = cats.map(cat => {
+    const items = soundFiles.filter(s => s.category === cat).map(s => {
+      const esc = s.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<div class="sfx-item ${card.sfx === s.path ? 'active' : ''}" onclick="setSfxAndClose(${i},'${esc}')">
+        <button class="sfx-play-btn" onclick="event.stopPropagation();previewSfx('${esc}',80)">▶</button>
+        <span class="sfx-item-name">${s.name}</span>
+      </div>`;
+    }).join('');
+    return `<div class="sfx-group-label">${cat}</div><div class="sfx-items-grid">${items}</div>`;
+  }).join('');
+
+  return `<div class="sfx-row">
+    <div class="sfx-picker" id="sfx-picker-${i}">
+      <div class="sfx-trigger" onclick="toggleSfxDropdown(${i})">
+        <span class="sfx-trigger-label">${currentLabel}</span><span>▾</span>
+      </div>
+      <div class="sfx-dropdown" id="sfx-dd-${i}">
+        ${noneItem}${catItems}
+      </div>
+    </div>
+    ${hassfx ? `<span class="sfx-vol">🔊<input type="range" min="0" max="150" value="${vol}"
+      oninput="setSfxVolume(${i}, this.value, this.parentNode.querySelector('.sfx-num'))"
+      onchange="autosave()"><input type="number" class="sfx-num" min="0" max="150" value="${vol}"
+      oninput="setSfxVolume(${i}, this.value, null, this.parentNode.querySelector('input[type=range]'))"
+      onchange="autosave()">%</span>` : ''}
+    ${hassfx ? `<button onclick="setSfx(${i},'')">×</button>` : ''}
+  </div>`;
+}
+
+function positionSfxDropdown(dd, picker) {
+  const rect = picker.getBoundingClientRect();
+  const ddWidth = 780;
+  let left = rect.left;
+  if (left + ddWidth > window.innerWidth - 8) left = window.innerWidth - ddWidth - 8;
+  dd.style.top = (rect.bottom + 4) + 'px';
+  dd.style.left = Math.max(4, left) + 'px';
+}
+
+function toggleSfxDropdown(i) {
+  const dd = document.getElementById(`sfx-dd-${i}`);
+  const picker = document.getElementById(`sfx-picker-${i}`);
+  const isOpen = dd.classList.contains('open');
+  document.querySelectorAll('.sfx-dropdown.open').forEach(el => el.classList.remove('open'));
+  if (!isOpen) { positionSfxDropdown(dd, picker); dd.classList.add('open'); }
+}
+
+function setSfxAndClose(i, path) {
+  setSfx(i, path);
+  const dd = document.getElementById(`sfx-dd-${i}`);
+  if (dd) dd.classList.remove('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.sfx-picker')) {
+    document.querySelectorAll('.sfx-dropdown.open').forEach(el => el.classList.remove('open'));
+  }
+});
+
+document.getElementById('cardPanel').addEventListener('scroll', () => {
+  document.querySelectorAll('.sfx-dropdown.open').forEach(el => el.classList.remove('open'));
+});
+
+function setSfx(i, path) {
+  cards[i].sfx = path || undefined;
+  if (!path) delete cards[i].sfx_volume;
+  markDirty();
+  autosave();
+  renderCards();
+}
+
+function setSfxVolume(i, val, numEl, rangeEl) {
+  const v = Math.max(0, Math.min(150, Number(val)));
+  cards[i].sfx_volume = v;
+  if (numEl) numEl.value = v;
+  if (rangeEl) rangeEl.value = v;
+}
+
+// ── カット単位SFX（clips[k]ごと）────────────────────
+function clipSfxRowHtml(card, i, k) {
+  const clip = card.clips[k];
+  const cats = [...new Set(soundFiles.map(s => s.category))];
+  const currentLabel = clip.sfx
+    ? (soundFiles.find(s => s.path === clip.sfx)?.name ?? '効果音なし')
+    : '🔇 効果音なし';
+  const hassfx = !!clip.sfx;
+  const vol = clip.sfx_volume ?? 80;
+
+  const noneItem = `<div class="sfx-none-row">
+    <div class="sfx-item ${!hassfx ? 'active' : ''}" onclick="setClipSfxAndClose(${i},${k},'')">
+      <span class="sfx-item-name">🔇 効果音なし</span>
+    </div>
+  </div>`;
+  const catItems = cats.map(cat => {
+    const items = soundFiles.filter(s => s.category === cat).map(s => {
+      const esc = s.path.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+      return `<div class="sfx-item ${clip.sfx === s.path ? 'active' : ''}" onclick="setClipSfxAndClose(${i},${k},'${esc}')">
+        <button class="sfx-play-btn" onclick="event.stopPropagation();previewSfx('${esc}',80)">▶</button>
+        <span class="sfx-item-name">${s.name}</span>
+      </div>`;
+    }).join('');
+    return `<div class="sfx-group-label">${cat}</div><div class="sfx-items-grid">${items}</div>`;
+  }).join('');
+
+  return `<div class="sfx-row">
+    <div class="sfx-picker" id="sfx-picker-${i}-${k}">
+      <div class="sfx-trigger" onclick="toggleClipSfxDropdown(${i},${k})">
+        <span class="sfx-trigger-label">${currentLabel}</span><span>▾</span>
+      </div>
+      <div class="sfx-dropdown" id="sfx-dd-${i}-${k}">
+        ${noneItem}${catItems}
+      </div>
+    </div>
+    ${hassfx ? `<span class="sfx-vol">🔊<input type="range" min="0" max="150" value="${vol}"
+      oninput="setClipSfxVolume(${i},${k},this.value,this.parentNode.querySelector('.sfx-num'))"
+      onchange="autosave()"><input type="number" class="sfx-num" min="0" max="150" value="${vol}"
+      oninput="setClipSfxVolume(${i},${k},this.value,null,this.parentNode.querySelector('input[type=range]'))"
+      onchange="autosave()">%</span>` : ''}
+    ${hassfx ? `<button onclick="setClipSfx(${i},${k},'')">×</button>` : ''}
+  </div>`;
+}
+
+function toggleClipSfxDropdown(i, k) {
+  const dd = document.getElementById(`sfx-dd-${i}-${k}`);
+  const picker = document.getElementById(`sfx-picker-${i}-${k}`);
+  const isOpen = dd.classList.contains('open');
+  document.querySelectorAll('.sfx-dropdown.open').forEach(el => el.classList.remove('open'));
+  if (!isOpen) { positionSfxDropdown(dd, picker); dd.classList.add('open'); }
+}
+
+function setClipSfxAndClose(i, k, path) {
+  setClipSfx(i, k, path);
+  const dd = document.getElementById(`sfx-dd-${i}-${k}`);
+  if (dd) dd.classList.remove('open');
+}
+
+function setClipSfx(i, k, path) {
+  cards[i].clips[k].sfx = path || undefined;
+  if (!path) delete cards[i].clips[k].sfx_volume;
+  markDirty();
+  autosave();
+  renderCards();
+}
+
+function setClipSfxVolume(i, k, val, numEl, rangeEl) {
+  const v = Math.max(0, Math.min(150, Number(val)));
+  cards[i].clips[k].sfx_volume = v;
+  if (numEl) numEl.value = v;
+  if (rangeEl) rangeEl.value = v;
+}
+
+let sfxAudio = null;
+function previewSfx(path, vol) {
+  if (sfxAudio) { sfxAudio.pause(); sfxAudio = null; }
+  sfxAudio = new Audio('/api/sound?file=' + encodeURIComponent(path));
+  sfxAudio.volume = Math.min(1, (vol ?? 80) / 100);
+  sfxAudio.play();
+}
+
+function onPanelTitleInput(input) {
+  if (cards.length > 0) cards[0].title = input.value;
+}
+
+function onPanelTitleTypewriterChange(checkbox) {
+  if (cards.length > 0) cards[0].title_typewriter = checkbox.checked;
+  autosave();
+}
+
+// ── 再生 ──────────────────────────────────────
+// play()はユーザー操作（クリック）の呼び出しスタック内で同期的に呼ぶ必要がある
+// （loadedmetadataイベント等の非同期コールバック内で呼ぶと、ブラウザの自動再生
+// 制限に引っかかって再生がブロックされることがある）。そのためplay()は即時に
+// 呼び、currentTimeの設定はメタデータ読み込み済みなら即時・未読み込みなら
+// loadedmetadataで後から行う。
+function playSegment(file, inPoint, duration) {
+  const video = document.getElementById('previewVideo');
+  playUntil = null;
+
+  const applyRange = () => {
+    video.currentTime = inPoint;
+    playUntil = inPoint + duration;
+  };
+
+  if (currentPlayingFile !== file) {
+    currentPlayingFile = file;
+    showingFinal = false;
+    video.src = `/api/clip?file=${encodeURIComponent(file)}`;
+  }
+
+  if (video.readyState >= 1) {
+    applyRange();
+  } else {
+    video.addEventListener('loadedmetadata', applyRange, { once: true });
+  }
+  video.play().catch(() => {});
+}
+
+function playSub(i, k) {
+  const clip = cards[i].clips[k];
+  if (!clip) return;
+  if (currentPlayingFile !== clip.file) {
+    setStatus('読み込み中...（初回はプレビュー用に変換するため数秒〜数十秒かかります）');
+  }
+  playSegment(clip.file, clip.in, clip.duration);
+}
+
+document.getElementById('previewVideo').addEventListener('playing', () => {
+  if (document.getElementById('status').textContent.startsWith('読み込み中')) {
+    setStatus('');
+  }
+});
+
+document.getElementById('previewVideo').addEventListener('timeupdate', function () {
+  if (playUntil !== null && this.currentTime >= playUntil) {
+    this.pause();
+    playUntil = null;
+  }
+});
+
+document.getElementById('videoWrap').addEventListener('click', () => {
+  const video = document.getElementById('previewVideo');
+  if (video.paused) {
+    playUntil = null;
+    if (!video.src) {
+      // 動画未ロード → 完成版を読み込んで再生
+      currentPlayingFile = null;
+      showingFinal = true;
+      video.src = `/api/final?t=${Date.now()}`;
+    }
+    video.play().catch(() => {});
+  } else {
+    video.pause();
+  }
+});
+
+document.getElementById('previewVideo').addEventListener('play',  () => {
+  document.getElementById('playIcon').classList.add('hidden');
+});
+document.getElementById('previewVideo').addEventListener('pause', () => {
+  document.getElementById('playIcon').classList.remove('hidden');
+});
+
+// ── トリム ────────────────────────────────────
+function toggleTrim(i, k) {
+  document.getElementById(`trim-${i}-${k}`).classList.toggle('open');
+}
+
+function onTrimInput(i, k, range) {
+  const clip = cards[i].clips[k];
+  clip.in = parseFloat(range.value);
+  range.parentElement.querySelector('span').textContent = `in: ${clip.in.toFixed(2)}s`;
+  const info = document.getElementById(`clipinfo-${i}-${k}`);
+  if (info) info.textContent = `${clip.file} @${clip.in.toFixed(2)}s, ${clip.duration.toFixed(2)}s`;
+  // 左プレビューでその位置のフレームを確認（再生はしない）
+  const video = document.getElementById('previewVideo');
+  playUntil = null;
+  const seekOnly = () => { video.currentTime = clip.in; video.pause(); };
+  if (currentPlayingFile === clip.file) {
+    seekOnly();
+  } else {
+    currentPlayingFile = clip.file;
+    video.src = `/api/clip?file=${encodeURIComponent(clip.file)}`;
+    video.addEventListener('loadedmetadata', seekOnly, { once: true });
+  }
+}
+
+// ── in点の自動選定（assign_clips.pyのpick_in_pointと同じ考え方）──
+function pickInPoint(material, cardDuration) {
+  const maxIn = Math.max(0, material.duration - cardDuration);
+  if (material.good_in != null) {
+    return Math.min(Math.max(0, material.good_in), maxIn);
+  }
+  for (const t of (material.motion_ts || [])) {
+    if (t <= maxIn) return t;
+  }
+  return Math.min(material.duration * 0.3, maxIn);
+}
+
+// このカードの他サブクリップ・隣接カードと違う素材を選ぶ（毎カット切替のため）
+function neighborFiles(i) {
+  const files = [];
+  if (cards[i - 1]) cards[i - 1].clips.forEach(c => files.push(c.file));
+  if (cards[i + 1]) cards[i + 1].clips.forEach(c => files.push(c.file));
+  return files;
+}
+
+function pickDistinctMaterial(i, excludeFiles) {
+  const exclude = new Set([...excludeFiles, ...neighborFiles(i)]);
+  return materials.find(m => !exclude.has(m.file)) || materials[0];
+}
+
+function applyClipToSub(card, k, material, subDuration) {
+  card.clips[k] = {
+    file: material.file,
+    in: pickInPoint(material, subDuration),
+    duration: round3(subDuration),
+  };
+}
+
+function round3(x) { return Math.round(x * 1000) / 1000; }
+
+// ── 素材の差し替え（サブクリップ単位）──────────────
+function swapSub(i, k) {
+  const card = cards[i];
+  const cur = card.clips[k].file;
+  const currentIdx = materials.findIndex(m => m.file === cur);
+  // このカードの他サブクリップ・隣接カードと被らない次の素材へ巡回
+  const exclude = new Set([
+    ...card.clips.filter((_, kk) => kk !== k).map(c => c.file),
+    ...neighborFiles(i),
+  ]);
+
+  let nextIdx = (currentIdx + 1) % materials.length;
+  for (let s = 1; s < materials.length; s++) {
+    const idx = (currentIdx + s) % materials.length;
+    if (!exclude.has(materials[idx].file)) { nextIdx = idx; break; }
+  }
+  applyClipToSub(card, k, materials[nextIdx], card.clips[k].duration);
+  renderCards();
+  playSub(i, k);
+  autosave();
+}
+
+function selectFileSub(i, k, filename) {
+  const card = cards[i];
+  const material = materials.find(m => m.file === filename);
+  if (material) {
+    applyClipToSub(card, k, material, card.clips[k].duration);
+    renderCards();
+    playSub(i, k);
+    autosave();
+  }
+}
+
+// ── カット追加 / 削除（1カードに複数素材）──────────
+function addCut(i) {
+  const card = cards[i];
+  const cardDur = card.end - card.start;
+  const n = card.clips.length + 1;
+  const sub = round3(cardDur / n);
+  // 既存サブクリップの尺を均等割りに再設定
+  card.clips.forEach(c => { c.duration = sub; });
+  // 追加する2つ目以降は、既存・隣接と違う素材を自動選定
+  const usedHere = card.clips.map(c => c.file);
+  const mat = pickDistinctMaterial(i, usedHere);
+  card.clips.push({ file: mat.file, in: pickInPoint(mat, sub), duration: sub });
+  renderCards();
+  setStatus(`カットを追加しました（${n}カット）`);
+  autosave();
+}
+
+function deleteCut(i, k) {
+  const card = cards[i];
+  if (card.clips.length <= 1) return;
+  card.clips.splice(k, 1);
+  const cardDur = card.end - card.start;
+  const sub = round3(cardDur / card.clips.length);
+  card.clips.forEach(c => { c.duration = sub; });
+  renderCards();
+  autosave();
+}
+
+// ── タグによる再選定（カードを単一クリップに戻す）──────
+async function reassignByTag(i) {
+  const card = cards[i];
+  const tagFilter = document.getElementById(`tagSelect-${i}`).value;
+
+  const res = await fetch('/api/reassign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ card_id: card.id, tag_filter: tagFilter }),
+  });
+  const data = await res.json();
+  if (data.ok) {
+    card.clips = data.clips;
+    card.tag_filter = tagFilter;
+    renderCards();
+    setStatus('タグで素材を再選定しました');
+    autosave();
+  } else {
+    setStatus(`❌ ${data.error}`);
+  }
+}
+
+// ── カード削除（直前の1件だけ取り消し可能）──────────
+let lastDeleted = null; // {card, index}
+let _undoHideTimer = null;
+
+function recalcCardTimes() {
+  let t = 0;
+  cards.forEach(card => {
+    const dur = card.end - card.start;
+    card.start = round3(t);
+    card.end = round3(t + dur);
+    t += dur;
+  });
+}
+
+function showUndoToast() {
+  clearTimeout(_undoHideTimer);
+  document.getElementById('undoToast').classList.remove('hidden');
+  _undoHideTimer = setTimeout(() => {
+    document.getElementById('undoToast').classList.add('hidden');
+    lastDeleted = null;
+  }, 30000);
+}
+
+function undoDeleteCard() {
+  if (!lastDeleted) return;
+  clearTimeout(_undoHideTimer);
+  cards.splice(lastDeleted.index, 0, lastDeleted.card);
+  lastDeleted = null;
+  document.getElementById('undoToast').classList.add('hidden');
+  recalcCardTimes();
+  renderCards();
+  updateTotalDuration();
+  autosave();
+}
+
+function deleteCard(i) {
+  lastDeleted = { card: JSON.parse(JSON.stringify(cards[i])), index: i };
+  const wasLast = (i === cards.length - 1);
+  cards.splice(i, 1);
+  // 末尾カードを削除した場合、新しい末尾カードをボイスオーバー終端まで延長
+  if (wasLast && cards.length > 0 && voiceoverEnd > 0) {
+    const last = cards[cards.length - 1];
+    const ext = voiceoverEnd - last.end;
+    if (ext > 0.01) {
+      last.end = Math.round(voiceoverEnd * 1000) / 1000;
+      last.clips.forEach(cl => { cl.duration = Math.round((cl.duration + ext) * 1000) / 1000; });
+    }
+  }
+  recalcCardTimes();
+  renderCards();
+  updateTotalDuration();
+  autosave();
+  showUndoToast();
+}
+
+// ── レンダー状態表示 ──────────────────────────────
+function setRenderStatus(msg, color) {
+  const el = document.getElementById('render-status');
+  el.textContent = msg;
+  el.style.color = color || 'var(--text-muted)';
+  el.style.display = msg ? 'block' : 'none';
+}
+
+// ── 自動書き出し ──────────────────────────────────
+let _saveTimer = null;
+let _renderTimer = null;
+let _rendering = false;
+let _pendingRender = false;
+
+function scheduleAutoRender(delay) {
+  clearTimeout(_renderTimer);
+  setRenderStatus('🕐 自動更新予定...', '#f5a623');
+  _renderTimer = setTimeout(_autoRender, delay ?? 2500);
+}
+
+async function _autoRender() {
+  if (_rendering) { _pendingRender = true; return; }
+  _rendering = true;
+
+  const video = document.getElementById('previewVideo');
+  const savedTime = video.currentTime;
+  const wasFinal = showingFinal;
+
+  clearTimeout(_saveTimer);
+  setRenderStatus('⏳ 更新中です...', 'var(--text-muted)');
+  document.getElementById('renderBtn').disabled = true;
+
+  try {
+    await fetch('/api/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards }),
+    });
+    const res = await fetch('/api/render', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const data = await res.json();
+
+    if (data.ok) {
+      setRenderStatus('✅ 更新完了', '#f5a623');
+      setTimeout(() => setRenderStatus(''), 5000);
+      // 更新完了後は常に完成版をプレビューに読み込む（完成版を見ていた場合は同じ位置を復元）
+      currentPlayingFile = null;
+      showingFinal = true;
+      video.src = `/api/final?t=${Date.now()}`;
+      if (wasFinal) {
+        video.addEventListener('loadedmetadata', () => {
+          video.currentTime = savedTime;
+        }, { once: true });
+      }
+    } else {
+      setRenderStatus(`❌ ${data.error}`, '#f44336');
+    }
+  } catch (err) {
+    setRenderStatus('❌ 通信エラー（サーバーを再起動してください）', '#f44336');
+  } finally {
+    _rendering = false;
+    document.getElementById('renderBtn').disabled = false;
+  }
+
+  if (_pendingRender) {
+    _pendingRender = false;
+    scheduleAutoRender(500);
+  }
+}
+
+// ── 自動保存（編集のたびにtimeline.jsonへ）──
+function autosave() {
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async () => {
+    await fetch('/api/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cards }),
+    });
+  }, 300);
+  scheduleAutoRender(2500);
+}
+
+function markDirty() {} // 後方互換（autosaveがscheduleAutoRenderを兼ねるため不要）
+function clearDirty() {}
+
+// ── 保存・書き出し ──────────────────────────────
+function setStatus(msg) {
+  document.getElementById('status').textContent = msg;
+}
+
+async function saveTimeline() {
+  setStatus('保存中...');
+  await fetch('/api/save', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cards }),
+  });
+  setStatus('');
+}
+
+async function renderFinal() {
+  clearTimeout(_saveTimer);
+  clearTimeout(_renderTimer);
+  if (_rendering) return;
+  await _autoRender();
+}
+
+function showFinal() {
+  const video = document.getElementById('previewVideo');
+  currentPlayingFile = null;
+  showingFinal = true;
+  playUntil = null;
+  video.src = `/api/final?t=${Date.now()}`;
+  video.addEventListener('loadedmetadata', () => {
+    video.currentTime = 0;
+    video.play().catch(() => {});
+  }, { once: true });
+}
+
+function exportReel() {
+  const a = document.createElement('a');
+  a.href = '/api/export';
+  a.download = 'reel.mp4';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// カード番号をクリックすると、完成版プレビューをそのカードの位置から再生する。
+// 30枚目のカードを直しても、確認のために毎回頭から再生する必要がなくなる。
+function seekFinal(i) {
+  const video = document.getElementById('previewVideo');
+  const startAt = cards[i].start;
+  playUntil = null;
+
+  const jump = () => { video.currentTime = startAt; video.play().catch(() => {}); };
+
+  if (showingFinal) {
+    // 既に完成版を読み込み済みならネットワーク再取得なしで即ジャンプ
+    if (video.readyState >= 1) jump();
+    else video.addEventListener('loadedmetadata', jump, { once: true });
+  } else {
+    currentPlayingFile = null;
+    showingFinal = true;
+    video.src = `/api/final?t=${Date.now()}`;
+    video.addEventListener('loadedmetadata', jump, { once: true });
+  }
+}
+
+// ▶ 再生ボタン用: final.mp4のそのカード区間だけ再生（効果音込みで確認できる）
+function playCardFinal(i) {
+  const video = document.getElementById('previewVideo');
+  const startAt = cards[i].start;
+  playUntil = cards[i].end;
+
+  if (!showingFinal) {
+    currentPlayingFile = null;
+    showingFinal = true;
+    video.src = `/api/final?t=${Date.now()}`;
+  }
+
+  // currentTimeはメタデータ読み込み済みなら即時・未読み込みならloadedmetadataで設定
+  const seek = () => { video.currentTime = startAt; };
+  if (video.readyState >= 1) {
+    seek();
+  } else {
+    video.addEventListener('loadedmetadata', seek, { once: true });
+  }
+  // play()はクリックのコールスタック内で同期的に呼ぶ（自動再生制限を回避するため）
+  video.play().catch(() => {});
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 's' && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    saveTimeline();
+  }
+});
+
+loadAll();
+</script>
+</body>
+</html>

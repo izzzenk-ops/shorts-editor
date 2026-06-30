@@ -1,0 +1,11 @@
+venv/
+work/
+__pycache__/
+scripts/__pycache__/
+scripts/_vendor/__pycache__/
+*.pyc
+*.mp4
+*.m4a
+*.proxy.mp4
+config.json
+.DS_Store

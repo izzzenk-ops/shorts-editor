@@ -221,7 +221,7 @@ def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,
 
     n_inputs = 1 + len(valid_sfx)
     amix_inputs = "[1:a]" + "".join(sfx_labels)
-    filter_parts.append(f"{amix_inputs}amix=inputs={n_inputs}:duration=first:dropout_transition=0[amixed]")
+    filter_parts.append(f"{amix_inputs}amix=inputs={n_inputs}:duration=first:dropout_transition=0:normalize=0[amixed]")
     filter_complex = ";".join(filter_parts)
 
     cmd += ["-filter_complex", filter_complex,
@@ -253,7 +253,7 @@ def mix_sfx_only(video_path: Path, output_path: Path, sfx_entries: list):
 
     n_inputs = 1 + len(valid_sfx)
     amix_inputs = "[0:a]" + "".join(sfx_labels)
-    filter_parts.append(f"{amix_inputs}amix=inputs={n_inputs}:duration=first:dropout_transition=0[amixed]")
+    filter_parts.append(f"{amix_inputs}amix=inputs={n_inputs}:duration=first:dropout_transition=0:normalize=0[amixed]")
     filter_complex = ";".join(filter_parts)
 
     cmd += ["-filter_complex", filter_complex,

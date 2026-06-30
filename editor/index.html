@@ -908,9 +908,25 @@ document.getElementById('previewVideo').addEventListener('pause', () => {
 
 // ── トリム ────────────────────────────────────
 function toggleTrim(i, k) {
-  document.getElementById(`trim-${i}-${k}`).classList.toggle('open');
+  const row = document.getElementById(`trim-${i}-${k}`);
+  const wasOpen = row.classList.contains('open');
+  row.classList.toggle('open');
+  // 開くとき: クリップを事前読み込みしてスライダー操作を即レスポンスに
+  if (!wasOpen) {
+    const clip = cards[i].clips[k];
+    const video = document.getElementById('previewVideo');
+    playUntil = null;
+    if (currentPlayingFile !== clip.file) {
+      currentPlayingFile = clip.file;
+      video.src = `/api/clip?file=${encodeURIComponent(clip.file)}`;
+      video.addEventListener('canplay', () => { video.currentTime = clip.in; }, { once: true });
+    } else {
+      video.currentTime = clip.in;
+    }
+  }
 }
 
+let _trimSaveTimer = null;
 function onTrimInput(i, k, range) {
   const clip = cards[i].clips[k];
   clip.in = parseFloat(range.value);
@@ -920,14 +936,17 @@ function onTrimInput(i, k, range) {
   // 左プレビューでその位置のフレームを確認（再生はしない）
   const video = document.getElementById('previewVideo');
   playUntil = null;
-  const seekOnly = () => { video.currentTime = clip.in; video.pause(); };
-  if (currentPlayingFile === clip.file) {
-    seekOnly();
-  } else {
+  if (currentPlayingFile !== clip.file) {
+    // フォールバック: 違うファイルの場合は読み込んでからシーク
     currentPlayingFile = clip.file;
     video.src = `/api/clip?file=${encodeURIComponent(clip.file)}`;
-    video.addEventListener('loadedmetadata', seekOnly, { once: true });
+    video.addEventListener('canplay', () => { video.currentTime = clip.in; }, { once: true });
+  } else {
+    video.currentTime = clip.in;
   }
+  // 入力が止まって500ms後に自動保存
+  clearTimeout(_trimSaveTimer);
+  _trimSaveTimer = setTimeout(() => saveTimeline(true), 500);
 }
 
 // ── in点の自動選定（assign_clips.pyのpick_in_pointと同じ考え方）──

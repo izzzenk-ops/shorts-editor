@@ -366,6 +366,17 @@ def main():
 
     materials_dir = Path(_load_json(materials_path)["materials_dir"])
 
+    def _prewarm_proxies():
+        clips = _load_json(materials_path).get("clips", [])
+        for clip in clips:
+            try:
+                _get_preview_proxy(clip["file"])
+            except Exception:
+                pass
+        print(f"   ✅ プロキシ事前生成完了 ({len(clips)}件)")
+
+    threading.Thread(target=_prewarm_proxies, daemon=True).start()
+
     url = f"http://localhost:{PORT}"
     print(f"\n🌐 エディタ起動中... {url}")
     print(f"   プロジェクト: {project}")

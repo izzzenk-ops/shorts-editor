@@ -194,6 +194,14 @@ def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,
     sfx_entries = sfx_entries or []
     valid_sfx = [s for s in sfx_entries if Path(s["path"]).exists()]
 
+    # アフレコ長を基準にする（-shortestだと映像が短い場合に末尾の音声が切れるため）
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1", str(voiceover_path)],
+        capture_output=True, text=True, check=True,
+    )
+    vo_duration = float(r.stdout.strip().split("=")[-1])
+
     if not valid_sfx:
         cmd = ["ffmpeg", "-nostdin", "-y",
                "-i", str(video_path),
@@ -201,7 +209,7 @@ def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,
                "-map", "0:v:0", "-map", "1:a:0",
                "-c:v", "copy",
                "-c:a", "aac", "-b:a", "192k",
-               "-shortest",
+               "-t", str(vo_duration),
                str(output_path)]
         subprocess.run(cmd, capture_output=True, check=True)
         return
@@ -227,7 +235,7 @@ def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,
     cmd += ["-filter_complex", filter_complex,
             "-map", "0:v:0", "-map", "[amixed]",
             "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
-            "-shortest", str(output_path)]
+            "-t", str(vo_duration), str(output_path)]
     subprocess.run(cmd, capture_output=True, check=True)
 
 

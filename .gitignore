@@ -9,3 +9,4 @@ scripts/_vendor/__pycache__/
 *.proxy.mp4
 config.json
 .DS_Store
+.claude/

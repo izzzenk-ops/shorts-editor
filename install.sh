@@ -30,13 +30,19 @@ echo "📦 依存パッケージをインストール中（初回は数分かか
 
 # 4. config.json（効果音フォルダの設定）
 CONFIG="$REPO_DIR/config.json"
+mkdir -p "$REPO_DIR/sounds"
 if [ ! -f "$CONFIG" ]; then
-  echo ""
-  echo "🔊 効果音フォルダのパスを入力してください"
-  echo "   （例: /Users/yourname/Desktop/sounds）"
-  read -r -p "   > " SOUND_DIR
+  if [ -t 0 ]; then
+    # 対話ターミナルから実行された場合のみ入力を求める
+    echo ""
+    echo "🔊 効果音フォルダのパスを入力してください（未入力でEnterでもOK）"
+    echo "   （例: /Users/yourname/Desktop/sounds）"
+    read -r -p "   > " SOUND_DIR
+  fi
+  # 未入力・非対話実行時は同梱の sounds/ を既定にする
+  SOUND_DIR="${SOUND_DIR:-$REPO_DIR/sounds}"
   echo "{\"sound_dir\": \"$SOUND_DIR\"}" > "$CONFIG"
-  echo "   config.json に保存しました"
+  echo "   config.json に保存しました（sound_dir: $SOUND_DIR）"
 else
   echo ""
   echo "✅ config.json は設定済みです"

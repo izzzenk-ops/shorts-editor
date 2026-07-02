@@ -522,9 +522,11 @@ function clipFullDuration(filename) {
 }
 
 function cardFootHtml(card, i, tagFilter) {
+  const hasNext = i < cards.length - 1;
   return `
     <div class="card-foot">
       <button onclick="addCut(${i})">＋ カット追加</button>
+      ${hasNext ? `<button onclick="mergeWithNext(${i})">⬇ 次カードと合体</button>` : ''}
       <select id="tagSelect-${i}">
         <option value="either" ${tagFilter === 'either' ? 'selected' : ''}>どちらでも</option>
         <option value="person" ${tagFilter === 'person' ? 'selected' : ''}>人物</option>
@@ -594,7 +596,7 @@ function renderCards() {
     div.innerHTML = `
       <div class="card-header">
         <span class="card-num"
-              onclick="seekFinal(${i})" title="完成版プレビューをこのカードの位置から再生">カット${card.id}</span>
+              onclick="seekFinal(${i})" title="完成版プレビューをこのカードの位置から再生">カット${i + 1}</span>
         <span>${card.start.toFixed(2)}s 〜 ${card.end.toFixed(2)}s</span>
         <span>${(card.end - card.start).toFixed(2)}s</span>
         <span>${card.text.length}字</span>
@@ -1043,6 +1045,26 @@ function deleteCut(i, k) {
   card.clips.forEach(c => { c.duration = sub; });
   renderCards();
   autosave();
+}
+
+// ── カード合体（カードiと次カードi+1を1枚にまとめる）────
+function mergeWithNext(i) {
+  if (i >= cards.length - 1) return;
+  const a = cards[i];
+  const b = cards[i + 1];
+  // テロップは連結（次カードのテキストを後ろにつなぐ）
+  a.text = (a.text || '') + (b.text || '');
+  // 尺は次カードの終わりまで伸ばす
+  a.end = b.end;
+  // 映像は両カードのサブクリップをそのまま連結（前半=a、後半=bの映像）
+  a.clips = a.clips.concat(b.clips);
+  // 次カードを配列から除去
+  cards.splice(i + 1, 1);
+  recalcCardTimes();
+  renderCards();
+  updateTotalDuration();
+  autosave();
+  setStatus(`カードを合体しました（${a.clips.length}カット）`);
 }
 
 // ── タグによる再選定（カードを単一クリップに戻す）──────

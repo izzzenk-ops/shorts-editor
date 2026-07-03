@@ -408,6 +408,18 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
     output_path = Path(output_path)
     work_dir = output_path.parent
 
+    # 素材の存在チェック（欠損ファイルを生のffmpegエラーにせず分かりやすく報告する）
+    missing = []
+    for idx, card in enumerate(cards):
+        for clip in card.get("clips", []):
+            if not (materials_dir / clip["file"]).exists():
+                missing.append(f"カード{idx + 1}の「{clip['file']}」")
+    if missing:
+        raise RuntimeError(
+            "素材が見つかりません: " + "、".join(missing)
+            + "。エディタで該当カードに別の素材を割り当ててから書き出してください。"
+        )
+
     segments_to_cut = _flatten_segments(cards, materials_dir, jl_cut_offset)
     if not segments_to_cut:
         raise RuntimeError("書き出せるセグメントがありません（素材割当てを確認してください）")

@@ -248,6 +248,15 @@
     line-height: 1.5;
   }
   .card-text:focus { outline: none; border-color: var(--accent); }
+  .card-text-row { display: flex; gap: 14px; align-items: flex-start; margin-top: 8px; }
+  .card-text-row .card-text { flex: 0 0 38%; width: auto; margin: 0; }
+  .card-side-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
   .clip-row {
     margin-top: 8px;
     display: flex;
@@ -454,6 +463,9 @@
                onchange="onPanelTitleTypewriterChange(this)"> 2行目をタイプライター表示
       </label>
     </div>
+    <button class="btn-accent-outline" id="rescanBtn" style="white-space:nowrap;flex-shrink:0"
+            onclick="rescanMaterials()"
+            title="素材フォルダに追加した動画を読み込みます">🔄 動画素材フォルダを更新</button>
     <button class="btn-blue" style="white-space:nowrap;flex-shrink:0" onclick="exportReel()">⬇ 動画出力</button>
   </div>
   <div id="cardPanel"></div>
@@ -537,8 +549,13 @@ function cardFootHtml(card, i, tagFilter) {
     </div>`;
 }
 
+function isImageFile(f) {
+  return /\.(jpe?g|png|webp)$/i.test(f || '');
+}
+
 function clipBlockHtml(card, i, k, footHtml) {
   const clip = card.clips[k];
+  const isImg = isImageFile(clip.file);
   const fullDur = clipFullDuration(clip.file);
   const maxIn = Math.max(0, fullDur - (clip.duration || 0));
   const multi = card.clips.length > 1;
@@ -554,22 +571,22 @@ function clipBlockHtml(card, i, k, footHtml) {
              title="クリックで左に再生" onclick="playSub(${i},${k})">
         <div class="clip-actions">
           <div class="clip-info" id="clipinfo-${i}-${k}">
-            ${clip.file} @${(clip.in || 0).toFixed(2)}s, ${(clip.duration || 0).toFixed(2)}s
+            ${clip.file} ${isImg ? '🖼 画像' : `@${(clip.in || 0).toFixed(2)}s`}, ${(clip.duration || 0).toFixed(2)}s
           </div>
           <div class="clip-actions-buttons">
             <button onclick="playCardFinal(${i})">▶ 再生</button>
-            <button onclick="toggleTrim(${i},${k})">✂️ トリム</button>
+            ${isImg ? '' : `<button onclick="toggleTrim(${i},${k})">✂️ トリム</button>`}
             <button onclick="swapSub(${i},${k})">🔄 別素材</button>
             <select onchange="selectFileSub(${i},${k},this.value)">${fileOptions}</select>
             ${multi ? `<button class="btn-danger" onclick="deleteCut(${i},${k})">🗑 カット削除</button>` : ''}
           </div>
-          <div class="trim-row" id="trim-${i}-${k}">
+          ${isImg ? '' : `<div class="trim-row" id="trim-${i}-${k}">
             <span>in: ${(clip.in || 0).toFixed(2)}s</span>
             <input type="range" min="0" max="${maxIn.toFixed(2)}" step="0.05"
                    value="${(clip.in || 0).toFixed(2)}"
                    oninput="onTrimInput(${i},${k},this)"
                    onchange="autosave()">
-          </div>
+          </div>`}
           ${clipSfxRowHtml(card, i, k)}
           ${footHtml || ''}
         </div>
@@ -601,11 +618,19 @@ function renderCards() {
         <span>${(card.end - card.start).toFixed(2)}s</span>
         <span>${card.text.length}字</span>
       </div>
-      <textarea class="card-text" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
-        title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
-      ${blocks || '<div class="clip-info">(未割当て)</div>'}
+      <div class="card-text-row">
+        <textarea class="card-text" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
+          title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
+        <div class="card-side-controls">
+          ${zoomRowHtml(card, i)}
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            ${cardColorPickerHtml(card, i)}
+            ${cardFontSizeHtml(card, i)}
+          </div>
+        </div>
+      </div>
+      ${blocks || emptyClipHtml(i)}
       ${singleClip ? '' : footHtml}
-      ${zoomRowHtml(card, i)}
     `;
     panel.appendChild(div);
   });
@@ -1019,6 +1044,33 @@ function selectFileSub(i, k, filename) {
   }
 }
 
+// 未割当てカード用：素材選択プルダウン
+function emptyClipHtml(i) {
+  const opts = ['<option value="">📁 素材を選んで割り当て…</option>']
+    .concat(materials.map(m => `<option value="${m.file}">${m.file}</option>`))
+    .join('');
+  return `
+    <div class="clip-block">
+      <div class="clip-info">（未割当て）↓ 下のプルダウンから映像素材を選んでください</div>
+      <div class="clip-actions-buttons">
+        <select onchange="assignFirstClip(${i}, this.value)">${opts}</select>
+      </div>
+    </div>`;
+}
+
+// 未割当てカードに最初の素材を割り当てる
+function assignFirstClip(i, filename) {
+  if (!filename) return;
+  const card = cards[i];
+  const material = materials.find(m => m.file === filename);
+  if (!material) return;
+  const dur = round3(card.end - card.start);
+  card.clips = [{ file: material.file, in: pickInPoint(material, dur), duration: dur }];
+  renderCards();
+  playSub(i, 0);
+  autosave();
+}
+
 // ── カット追加 / 削除（1カードに複数素材）──────────
 function addCut(i) {
   const card = cards[i];
@@ -1056,8 +1108,17 @@ function mergeWithNext(i) {
   a.text = (a.text || '') + (b.text || '');
   // 尺は次カードの終わりまで伸ばす
   a.end = b.end;
-  // 映像は両カードのサブクリップをそのまま連結（前半=a、後半=bの映像）
+  // 映像は両カードのサブクリップを連結（前半=a、後半=bの映像）
   a.clips = a.clips.concat(b.clips);
+  // 合体後のカード尺を全サブクリップで均等割り（「＋カット追加」と同じ挙動）
+  const dur = round3(a.end - a.start);
+  const sub = round3(dur / a.clips.length);
+  a.clips.forEach(c => {
+    c.duration = sub;
+    // 折半で伸びた尺が素材長を超える場合はin点を後ろにずらしすぎないようクランプ
+    const full = clipFullDuration(c.file);
+    if (full && c.in + sub > full) c.in = Math.max(0, round3(full - sub));
+  });
   // 次カードを配列から除去
   cards.splice(i + 1, 1);
   recalcCardTimes();
@@ -1233,6 +1294,93 @@ function clearDirty() {}
 // ── 保存・書き出し ──────────────────────────────
 function setStatus(msg) {
   document.getElementById('status').textContent = msg;
+}
+
+// ── テロップ色の選択 ──────────────────────────────
+const TELOP_COLORS = [
+  { name: '白',     hex: null,     css: '#ffffff' },
+  { name: '赤',     hex: 'FF3B30', css: '#ff3b30' },
+  { name: '青',     hex: '1E90FF', css: '#1e90ff' },
+  { name: '黄',     hex: 'FFDD00', css: '#ffdd00' },
+  { name: 'ピンク', hex: 'FF4FA3', css: '#ff4fa3' },
+];
+
+// カード個別の色ピッカー（各カード内）
+function cardColorPickerHtml(card, i) {
+  const swatches = TELOP_COLORS.map(c => {
+    const active = (card.telop_color || null) === (c.hex || null);
+    return `<button title="${c.name}" onclick="setCardTelopColor(${i},${c.hex ? `'${c.hex}'` : 'null'})"
+      style="width:18px;height:18px;padding:0;border-radius:50%;background:${c.css};
+      border:2px solid ${active ? 'var(--accent)' : 'var(--border-strong)'};cursor:pointer"></button>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">テロップ色</span>${swatches}</div>`;
+}
+
+function setCardTelopColor(i, hex) {
+  cards[i].telop_color = hex;
+  renderCards();
+  autosave();
+}
+
+// カード個別のテロップフォントサイズ（null=標準45）
+const TELOP_SIZES = [
+  { name: '標準', size: null },
+  { name: '大',   size: 58 },
+  { name: '特大', size: 72 },
+  { name: '最大', size: 88 },
+];
+
+function cardFontSizeHtml(card, i) {
+  const cur = card.telop_fontsize || null;
+  const btns = TELOP_SIZES.map(s => {
+    const active = (cur || null) === (s.size || null);
+    return `<button onclick="setCardFontSize(${i},${s.size ?? 'null'})"
+      style="padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;
+      border:1px solid ${active ? 'var(--accent)' : 'var(--border-strong)'};
+      background:${active ? 'var(--accent-soft)' : 'var(--surface-3)'};color:var(--text)">${s.name}</button>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">サイズ</span>${btns}</div>`;
+}
+
+function setCardFontSize(i, size) {
+  cards[i].telop_fontsize = size;
+  renderCards();
+  autosave();
+}
+
+// ── 素材フォルダの手動再読み込み ──────────────────────
+async function rescanMaterials() {
+  const btn = document.getElementById('rescanBtn');
+  btn.disabled = true;
+  const label = btn.textContent;
+  btn.textContent = '⏳ 読み込み中...';
+  setStatus('素材フォルダを読み込み中...');
+  try {
+    const res = await fetch('/api/rescan', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    });
+    const data = await res.json();
+    materials = (data.clips || materials).sort((a, b) => a.sequence_no - b.sequence_no);
+    // フォルダから消えた素材でカード割り当てが外れた場合があるのでタイムラインも取り直す
+    const tl = await fetch('/api/timeline').then(r => r.json());
+    cards = tl.cards;
+    renderCards();
+    updateTotalDuration();
+    const added = data._added || 0, removed = data._removed || 0;
+    const parts = [];
+    if (added) parts.push(`新規${added}本を追加`);
+    if (removed) parts.push(`消えた素材${removed}本を除去`);
+    setStatus(parts.length
+      ? `✅ ${parts.join(' / ')}（計${materials.length}本）`
+      : `変更なし（計${materials.length}本）`);
+  } catch (e) {
+    setStatus('❌ 素材の読み込みに失敗しました');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
 }
 
 async function saveTimeline() {

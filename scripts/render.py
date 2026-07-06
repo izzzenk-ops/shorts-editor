@@ -60,7 +60,7 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
     # fps=RENDER_FPSで固定フレームレート化する（VFRだとフレーム数換算が
     # ズレるため、後段のフレーム単位trimを正確にするのに必須）
     vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-          f"crop={WIDTH}:{HEIGHT},fps={RENDER_FPS},setpts=PTS-STARTPTS")
+          f"crop={WIDTH}:{HEIGHT},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
     af = "asetpts=PTS-STARTPTS"
     # -ar/-acで音声フォーマットを全セグメント共通に揃える。素材ごとにサンプル
     # レート・チャンネル数が違うと、後段のconcatデマルチプレクサ+-c copyで
@@ -88,13 +88,38 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
 EXTRACT_MARGIN = 0.15  # 結合時のtrimで正確な長さに切り直すため、少し長めに抽出しておく
 
 
+IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")
+
+
+def _run_extract_image(image_path: Path, duration: float, out_path: Path):
+    """静止画を duration 秒の動画セグメントにする（-loop 1）。画像には音声が
+    無いので anullsrc で無音トラックを付与する（後段のconcatが全セグメントに
+    音声を要求するため）。in点の概念は無い。"""
+    vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+          f"crop={WIDTH}:{HEIGHT},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
+    cmd = ["ffmpeg", "-nostdin", "-y",
+           "-loop", "1", "-framerate", str(RENDER_FPS), "-t", f"{duration:.4f}",
+           "-i", str(image_path),
+           "-f", "lavfi", "-t", f"{duration:.4f}", "-i", "anullsrc=r=48000:cl=stereo",
+           "-map", "0:v", "-map", "1:a",
+           "-vf", vf,
+           "-c:v", "h264_videotoolbox", "-q:v", "65",
+           "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+           str(out_path)]
+    subprocess.run(cmd, capture_output=True, check=True)
+
+
 def extract_video_segment(clip_path: Path, in_point: float, duration: float, out_path: Path):
     """まず高速な入力側シークで抽出し、結果が短すぎる（編集リストの異常等で
     0フレームになった）場合だけ、遅いが確実な出力側シークでやり直す。
     フレーム境界への丸めで実際の長さが要求値と数十ms単位でズレることがあるため、
     少し長め（+EXTRACT_MARGIN秒）に抽出し、結合時に正確な長さへtrimする
-    （render_unit_clipのtrim/atrim参照）。"""
+    （render_unit_clipのtrim/atrim参照）。静止画素材は_run_extract_imageで
+    duration秒の動画にする。"""
     duration = duration + EXTRACT_MARGIN
+    if clip_path.suffix.lower() in IMAGE_EXTS:
+        _run_extract_image(clip_path, duration, out_path)
+        return
     _run_extract(clip_path, in_point, duration, out_path, input_side_seek=True)
     try:
         actual = get_duration(out_path)
@@ -321,14 +346,16 @@ def build_units(cards: list) -> list:
     return [[c] for c in cards]
 
 
-def fingerprint_unit(unit_cards: list, unit_segments: list) -> str:
-    """ユニットの内容（テキスト・タグ・タイトル・割当て素材・厳密フレーム数）から
-    キャッシュキーを作る。内容が1つも変わっていなければ同じ値になり、
+def fingerprint_unit(unit_cards: list, unit_segments: list, telop_color: str = None) -> str:
+    """ユニットの内容（テキスト・タグ・タイトル・割当て素材・厳密フレーム数・テロップ色）
+    からキャッシュキーを作る。内容が1つも変わっていなければ同じ値になり、
     前回レンダー済みのmp4を再利用できる。"""
     payload = {
         "telop_style": TELOP_STYLE_VERSION,
+        "telop_color": telop_color,
         "cards": [{"text": c["text"], "tag_filter": c.get("tag_filter"), "title": c.get("title"),
                    "title_typewriter": c.get("title_typewriter", True),
+                   "telop_color": c.get("telop_color"), "telop_fontsize": c.get("telop_fontsize"),
                    "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level")} for c in unit_cards],
         "segments": [{"file": s["file"], "in": round(s["in"], 4), "frames": s["frames"]}
                      for s in unit_segments],
@@ -338,13 +365,13 @@ def fingerprint_unit(unit_cards: list, unit_segments: list) -> str:
 
 
 def render_unit(unit_cards: list, unit_segments: list, materials_dir: Path,
-                 work_dir: Path) -> tuple:
+                 work_dir: Path, telop_color: str = None) -> tuple:
     """1ユニットをキャッシュ確認のうえレンダーする（先頭カードに"title"が
     設定されていれば、build_caption_segmentsがその区間にタイトルを重ねて表示する）。
     戻り値: (mp4のパス, フィンガープリント, キャッシュヒットしたか)"""
     cache_dir = Path(work_dir) / "render_cache"
     cache_dir.mkdir(parents=True, exist_ok=True)
-    fp = fingerprint_unit(unit_cards, unit_segments)
+    fp = fingerprint_unit(unit_cards, unit_segments, telop_color)
     cache_path = cache_dir / f"{fp}.mp4"
     if cache_path.exists():
         return cache_path, fp, True
@@ -368,13 +395,22 @@ def render_unit(unit_cards: list, unit_segments: list, materials_dir: Path,
             seg_files.append(str(seg_path))
             frame_counts.append(seg["frames"])
 
-        caption_segments = build_caption_segments(local_cards, tmpdir)
+        caption_segments = build_caption_segments(local_cards, tmpdir, color=telop_color)
         # zoom_level は None のとき .get("zoom_level", 20) が None を返す（キーが存在するため）。
         # None / 100 で TypeError になるのを防ぐため、None → 20 にフォールバックする。
         raw_level = unit_cards[0].get("zoom_level")
         zoom_params = {"enabled": bool(unit_cards[0].get("zoom")),
                        "level": raw_level if raw_level is not None else 20}
-        render_unit_clip(seg_files, frame_counts, caption_segments, cache_path, zoom_params)
+        # 失敗時に壊れた（0バイト/途中で切れた）mp4がcache_pathに残ると、次回それを
+        # "完成済み"として再利用してしまい「moov atom not found」等の二次被害になる。
+        # 一時ファイルに書き、成功時のみ同一ディレクトリでアトミックにリネームする。
+        tmp_out = cache_dir / f"{fp}.partial.mp4"
+        try:
+            render_unit_clip(seg_files, frame_counts, caption_segments, tmp_out, zoom_params)
+            os.replace(tmp_out, cache_path)
+        except Exception:
+            tmp_out.unlink(missing_ok=True)
+            raise
 
     return cache_path, fp, False
 
@@ -398,7 +434,8 @@ def _cleanup_render_cache(work_dir: Path, used_fingerprints: set):
 
 
 def render_timeline(cards: list, materials_dir: Path, output_path: Path,
-                     voiceover_path: Path = None, jl_cut_offset: float = 0.0):
+                     voiceover_path: Path = None, jl_cut_offset: float = 0.0,
+                     telop_color: str = None):
     """カード単位（ユニット）でキャッシュしながらレンダーする（先頭カードに
     "title"が設定されていればその区間にタイトルを重ねて表示する。詳細は
     captions.build_caption_segments参照）。変更されていない
@@ -459,7 +496,7 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
     hit_count = 0
     with concurrent.futures.ThreadPoolExecutor(max_workers=UNIT_WORKERS) as executor:
         futures = {
-            executor.submit(render_unit, unit_cards, unit_segments, materials_dir, work_dir): i
+            executor.submit(render_unit, unit_cards, unit_segments, materials_dir, work_dir, telop_color): i
             for i, (unit_cards, unit_segments) in enumerate(plans)
         }
         for fut in concurrent.futures.as_completed(futures):

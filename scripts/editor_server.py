@@ -47,6 +47,136 @@ def _save_json(path: Path, data: dict):
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+_VIDEO_EXTS = (".mp4", ".mov")
+_IMAGE_EXTS = (".jpg", ".jpeg", ".png", ".webp")   # ffmpegが直接扱える画像
+_HEIC_EXTS = (".heic", ".heif")                     # sipsでjpgに変換して扱う
+
+
+def _convert_heic_to_jpg(src: Path) -> Path:
+    """HEIC/HEIFはffmpegが直接扱えないので、macOS標準のsipsで同フォルダに
+    jpgを作って返す。以後はそのjpgを素材として扱う。"""
+    dst = src.with_suffix(".jpg")
+    if not dst.exists():
+        subprocess.run(["sips", "-s", "format", "jpeg", str(src), "--out", str(dst)],
+                       capture_output=True)
+    return dst if dst.exists() else None
+
+
+def _make_image_thumb(src: Path, base: str, frames_dir: Path) -> list:
+    out = frames_dir / f"{base}_0.jpg"
+    subprocess.run(["ffmpeg", "-nostdin", "-y", "-i", str(src),
+                    "-vf", "scale=-2:640", "-frames:v", "1", "-q:v", "4", str(out)],
+                   capture_output=True)
+    if out.exists() and out.stat().st_size > 0:
+        return [{"path": str(out), "t": 0}]
+    return []
+
+
+def _probe_duration(p: Path) -> float:
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(p)],
+            capture_output=True, text=True)
+        return float(r.stdout.strip())
+    except Exception:
+        return 0.0
+
+
+def _extract_frames(src: Path, base: str, dur: float, frames_dir: Path, n: int = 8) -> list:
+    frames = []
+    if dur <= 0:
+        return frames
+    for i in range(n):
+        t = round(dur * (i + 0.5) / n, 2)
+        out = frames_dir / f"{base}_{i}.jpg"
+        subprocess.run(
+            ["ffmpeg", "-nostdin", "-y", "-ss", str(t), "-i", str(src),
+             "-frames:v", "1", "-vf", "scale=-2:640", "-q:v", "4", str(out)],
+            capture_output=True)
+        if out.exists() and out.stat().st_size > 0:
+            frames.append({"path": str(out), "t": t})
+    return frames
+
+
+def scan_and_register_materials() -> dict:
+    """materials_dir と materials.json を同期する。フォルダにある未登録の動画/画像を
+    追加（duration取得＋サムネ抽出）し、フォルダから消えた素材の登録は削除する。
+    タグ付けはしない（tag=either / memo=None）。手動の「動画素材フォルダを更新」ボタンから呼ぶ。"""
+    mjson_path = work_dir / "materials.json"
+    data = _load_json(mjson_path)
+    frames_dir = work_dir / "frames"
+    frames_dir.mkdir(exist_ok=True)
+
+    if not materials_dir.exists():
+        data["_added"] = 0
+        data["_removed"] = 0
+        return data
+
+    # フォルダから消えた素材の登録を削除する（幽霊素材の掃除）
+    removed_files = [c["file"] for c in data["clips"]
+                     if not (materials_dir / c["file"]).exists()]
+    if removed_files:
+        data["clips"] = [c for c in data["clips"]
+                         if (materials_dir / c["file"]).exists()]
+        # 消えた素材を使っているカードの割り当ても外す（未割当てに戻す）
+        tl_path = work_dir / "timeline.json"
+        if tl_path.exists():
+            tl = _load_json(tl_path)
+            gone = set(removed_files)
+            changed = False
+            for card in tl.get("cards", []):
+                kept = [cl for cl in card.get("clips", []) if cl["file"] not in gone]
+                if len(kept) != len(card.get("clips", [])):
+                    card["clips"] = kept
+                    changed = True
+            if changed:
+                _save_json(tl_path, tl)
+
+    existing = {c["file"] for c in data["clips"]}
+
+    all_exts = _VIDEO_EXTS + _IMAGE_EXTS + _HEIC_EXTS
+    files = sorted([f for f in materials_dir.iterdir()
+                    if f.is_file() and f.suffix.lower() in all_exts
+                    and not f.name.startswith(".")])
+    next_seq = max([c.get("sequence_no", 0) for c in data["clips"]], default=0) + 1
+    added = 0
+    for f in files:
+        ext = f.suffix.lower()
+        # HEICはjpgに変換して、以後jpgとして扱う
+        if ext in _HEIC_EXTS:
+            jpg = _convert_heic_to_jpg(f)
+            if jpg is None:
+                continue
+            f, ext = jpg, ".jpg"
+        if f.name in existing:
+            continue
+        if ext in _VIDEO_EXTS:
+            dur = _probe_duration(f)
+            frames = _extract_frames(f, f.name, dur, frames_dir)
+            data["clips"].append({
+                "file": f.name, "sequence_no": next_seq, "duration": dur,
+                "frames": frames, "motion_ts": [],
+                "tag": "either", "memo": None, "good_in": 0.5,
+            })
+        else:  # 画像（in点・尺の概念なし。カードの尺だけ表示する静止画）
+            frames = _make_image_thumb(f, f.name, frames_dir)
+            data["clips"].append({
+                "file": f.name, "sequence_no": next_seq, "duration": 0,
+                "frames": frames, "motion_ts": [],
+                "tag": "either", "memo": None, "good_in": 0.0, "is_image": True,
+            })
+        existing.add(f.name)
+        next_seq += 1
+        added += 1
+
+    if added or removed_files:
+        _save_json(mjson_path, data)
+    data["_added"] = added
+    data["_removed"] = len(removed_files)
+    return data
+
+
 def _get_preview_proxy(filename: str) -> Path:
     """カメラ直撮り素材は10bit HEVC等、ブラウザが直接デコードできない形式の
     ことがある（実機テストで発覚：MEDIA_ELEMENT_ERROR）。エディタのプレビュー用に
@@ -58,11 +188,22 @@ def _get_preview_proxy(filename: str) -> Path:
 
     if not proxy_path.exists():
         src = materials_dir / filename
-        cmd = ["ffmpeg", "-y", "-i", str(src),
-               "-vf", "scale=-2:960",
-               "-c:v", "h264_videotoolbox", "-q:v", "65",
-               "-c:a", "aac", "-b:a", "128k",
-               str(proxy_path)]
+        if src.suffix.lower() in _IMAGE_EXTS:
+            # 静止画は3秒のループ動画プロキシにする（エディタの<video>で再生できるように）
+            cmd = ["ffmpeg", "-y",
+                   "-loop", "1", "-framerate", "30", "-t", "3", "-i", str(src),
+                   "-f", "lavfi", "-t", "3", "-i", "anullsrc=r=48000:cl=stereo",
+                   "-map", "0:v", "-map", "1:a",
+                   "-vf", "scale=-2:960",
+                   "-c:v", "h264_videotoolbox", "-q:v", "65",
+                   "-c:a", "aac", "-b:a", "128k",
+                   str(proxy_path)]
+        else:
+            cmd = ["ffmpeg", "-y", "-i", str(src),
+                   "-vf", "scale=-2:960",
+                   "-c:v", "h264_videotoolbox", "-q:v", "65",
+                   "-c:a", "aac", "-b:a", "128k",
+                   str(proxy_path)]
         subprocess.run(cmd, capture_output=True, check=True)
 
     return proxy_path
@@ -198,6 +339,10 @@ class Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/render":
             self._handle_render(data)
+
+        elif self.path == "/api/rescan":
+            result = scan_and_register_materials()
+            self._send_json(result)
 
         else:
             self.send_response(404)

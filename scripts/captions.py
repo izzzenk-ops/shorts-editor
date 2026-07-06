@@ -110,9 +110,11 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
     base_style = style or PRESETS["shorts"]
-    # プリセットのfontsize（70）をTELOP_FONTSIZEで上書き
-    effective_style = {**base_style, "fontsize": TELOP_FONTSIZE}
-    font = ImageFont.truetype(FONT_PATH, effective_style["fontsize"], index=FONT_INDEX)
+    # フォントサイズ: styleが指定されていればその値（カード別サイズ等）を使う。
+    # style未指定のときはプリセットの70ではなくTELOP_FONTSIZEを既定にする。
+    fontsize = base_style.get("fontsize", TELOP_FONTSIZE) if style is not None else TELOP_FONTSIZE
+    effective_style = {**base_style, "fontsize": fontsize}
+    font = ImageFont.truetype(FONT_PATH, fontsize, index=FONT_INDEX)
 
     text_rgb = _hex_to_rgb(effective_style["color"])
     shadow_rgb = _hex_to_rgb(effective_style["shadow_color"])
@@ -130,7 +132,7 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     elif alignment == 8:
         y_start = margin_v
     else:
-        y_start = (height - total_h) // 2 + TELOP_Y_OFFSET
+        y_start = (height - total_h) // 2 + round(2.5 * fontsize)
 
     # シャドウレイヤー: 同位置に3回重ね描きしてから大きいブラーで均一なアウターグロー
     shadow_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -164,7 +166,8 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     img.save(out_path)
 
 
-def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float = CHAR_INTERVAL_S) -> list:
+def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float = CHAR_INTERVAL_S,
+                            color: str = None) -> list:
     """captions/ にPNGを書き出し、[{"path": ..., "start": ..., "end": ...}, ...] を返す。
     cards[0]に"title"が設定されていれば、cards[0]の時間範囲に「1行目=title固定表示＋
     2行目=cards[0]["text"]」で重ねて表示する（2行目はカード本文そのもの。新たな入力
@@ -176,6 +179,20 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
     base_style = PRESETS["shorts"]
     # wrap_textとrender_text_pngで同じfontsizeを使う（TELOP_FONTSIZEで統一）
     render_style = {**base_style, "fontsize": TELOP_FONTSIZE}
+
+    def style_for(card):
+        # カードごとの色・フォントサイズを反映。色はcard["telop_color"]（無ければ全体指定
+        # color、それも無ければ既定の白）。サイズはcard["telop_fontsize"]（無ければ既定）。
+        # 縁取り/グローは黒のまま。色は16進6桁・#なし。
+        s = {**render_style}
+        cc = card.get("telop_color") or color
+        if cc:
+            s["color"] = cc
+        fs = card.get("telop_fontsize")
+        if fs:
+            s["fontsize"] = fs
+        return s
+
     segments = []
 
     start_idx = 0
@@ -186,8 +203,9 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
         typewriter = cards[0].get("title_typewriter", True)
         title_start = cards[0]["start"]
         title_end = cards[0]["end"]
-        line1_sublines = wrap_text(line1, render_style)
-        line2_sublines = wrap_text(line2, render_style)
+        title_style = style_for(cards[0])
+        line1_sublines = wrap_text(line1, title_style)
+        line2_sublines = wrap_text(line2, title_style)
         n_chars = len(line2)
 
         if typewriter and n_chars > 0:
@@ -199,20 +217,21 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
             for k in range(1, n_chars + 1):
                 png_path = captions_dir / f"title_{k:03d}.png"
                 lines = line1_sublines + _reveal_lines(line2_sublines, k)
-                render_text_png(lines, png_path, style=render_style)
+                render_text_png(lines, png_path, style=title_style)
                 seg_end = title_end if k == n_chars else min(t + interval, title_end)
                 segments.append({"path": str(png_path), "start": t, "end": seg_end})
                 t = seg_end
         else:
             png_path = captions_dir / "title_0.png"
-            render_text_png(line1_sublines + line2_sublines, png_path, style=render_style)
+            render_text_png(line1_sublines + line2_sublines, png_path, style=title_style)
             segments.append({"path": str(png_path), "start": title_start, "end": title_end})
 
         start_idx = 1
 
     for card in cards[start_idx:]:
+        card_style = style_for(card)
         png_path = captions_dir / f"card_{card['id']:03d}.png"
-        render_text_png(wrap_text(card["text"], render_style), png_path, style=render_style)
+        render_text_png(wrap_text(card["text"], card_style), png_path, style=card_style)
         segments.append({"path": str(png_path), "start": card["start"], "end": card["end"]})
 
     return segments

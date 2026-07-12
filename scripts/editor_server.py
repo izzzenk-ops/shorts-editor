@@ -140,7 +140,9 @@ def scan_and_register_materials() -> dict:
                     if f.is_file() and f.suffix.lower() in all_exts
                     and not f.name.startswith(".")])
     next_seq = max([c.get("sequence_no", 0) for c in data["clips"]], default=0) + 1
-    added = 0
+
+    # まず新規ファイルを確定する（HEIC変換は直列＝軽い。重い処理は後段で並列化）
+    new_files = []
     for f in files:
         ext = f.suffix.lower()
         # HEICはjpgに変換して、以後jpgとして扱う
@@ -151,27 +153,47 @@ def scan_and_register_materials() -> dict:
             f, ext = jpg, ".jpg"
         if f.name in existing:
             continue
+        existing.add(f.name)
+        new_files.append((f, ext))
+
+    def _process(item):
+        # duration取得＋フレーム抽出（ffmpeg呼び出し＝重い）を1ファイル分。
+        # ファイルごとに独立なのでスレッドプールで並列化できる。
+        f, ext = item
         if ext in _VIDEO_EXTS:
             dur = _probe_duration(f)
             frames = _extract_frames(f, f.name, dur, frames_dir)
-            data["clips"].append({
-                "file": f.name, "sequence_no": next_seq, "duration": dur,
-                "frames": frames, "motion_ts": [],
-                "tag": "either", "memo": None, "good_in": 0.5,
-            })
-        else:  # 画像（in点・尺の概念なし。カードの尺だけ表示する静止画）
-            frames = _make_image_thumb(f, f.name, frames_dir)
-            data["clips"].append({
-                "file": f.name, "sequence_no": next_seq, "duration": 0,
-                "frames": frames, "motion_ts": [],
-                "tag": "either", "memo": None, "good_in": 0.0, "is_image": True,
-            })
-        existing.add(f.name)
-        next_seq += 1
-        added += 1
+            return {"file": f.name, "duration": dur, "frames": frames,
+                    "motion_ts": [], "tag": "either", "memo": None, "good_in": 0.5}
+        frames = _make_image_thumb(f, f.name, frames_dir)
+        return {"file": f.name, "duration": 0, "frames": frames,
+                "motion_ts": [], "tag": "either", "memo": None,
+                "good_in": 0.0, "is_image": True}
 
+    import concurrent.futures
+    if new_files:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+            results = list(ex.map(_process, new_files))
+        for clip in results:  # 元のファイル名順を保ったまま連番を振る
+            clip["sequence_no"] = next_seq
+            data["clips"].append(clip)
+            next_seq += 1
+
+    added = len(new_files)
     if added or removed_files:
         _save_json(mjson_path, data)
+
+    # 追加された動画のプレビュープロキシを裏で先に作っておく（初回▶再生の待ちを無くす）
+    new_videos = [f.name for f, ext in new_files if ext in _VIDEO_EXTS]
+    if new_videos:
+        def _prewarm_new():
+            for name in new_videos:
+                try:
+                    _get_preview_proxy(name)
+                except Exception:
+                    pass
+        threading.Thread(target=_prewarm_new, daemon=True).start()
+
     data["_added"] = added
     data["_removed"] = len(removed_files)
     return data

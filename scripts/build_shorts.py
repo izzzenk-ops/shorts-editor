@@ -37,11 +37,36 @@ def main():
     parser.add_argument("--voiceover", required=True, help="アフレコ音声ファイルのパス")
     parser.add_argument("--jl-cut", type=float, default=0.0,
                          help="J/Lカット: 映像の切り替え点をこの秒数だけずらす（例: 0.2）")
+    parser.add_argument("--cards-only", action="store_true",
+                         help="カード生成のみ（タグ付け・素材割当て・書き出しをせず、"
+                              "全カード未割当てでエディタ手動割り当て用に用意する）")
     args = parser.parse_args()
 
     materials_dir = Path(args.materials_dir)
     work_dir = WORK_ROOT / args.project
     materials_json = work_dir / "materials.json"
+
+    if args.cards_only:
+        # 手動割り当てフロー: アフレコ→カードだけ作り、素材はエディタの
+        # 「🔄 動画素材フォルダを更新」で後から取り込む（タグ付け不要）
+        work_dir.mkdir(parents=True, exist_ok=True)
+        print("【カードのみ生成】 アフレコを解析中...")
+        cards, voiceover_for_render = build_cards_from_voiceover(args.voiceover, work_dir)
+        for c in cards:
+            c["clips"] = []  # 未割当て
+        (work_dir / "timeline.json").write_text(
+            json.dumps({"cards": cards,
+                        "voiceover_path": str(voiceover_for_render) if voiceover_for_render else None},
+                       ensure_ascii=False, indent=2), encoding="utf-8")
+        if not materials_json.exists():
+            materials_json.write_text(
+                json.dumps({"materials_dir": str(materials_dir), "clips": []},
+                           ensure_ascii=False, indent=2), encoding="utf-8")
+        total = cards[-1]["end"] if cards else 0.0
+        print(f"  {len(cards)}カード / 想定再生時間: {fmt_time(total)}（全て未割当て）")
+        print(f"  エディタで素材を割り当ててください: "
+              f"editor_server.py {args.project} → 🔄 動画素材フォルダを更新")
+        return
 
     if not materials_json.exists():
         print(f"❌ {materials_json} が見つかりません。")

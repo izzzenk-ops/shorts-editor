@@ -487,6 +487,7 @@ let materials = [];
 let playUntil = null;
 let currentPlayingFile = null;
 let showingFinal = false;
+let finalExists = false;  // final.mp4が存在するか（無ければ▶再生は素材プレビューにフォールバック）
 let voiceoverEnd = 0;
 
 let soundFiles = [];
@@ -499,6 +500,7 @@ async function loadAll() {
   ]);
   soundFiles = soundsRes;
   cards = timeline.cards;
+  finalExists = !!timeline.final_exists;
   voiceoverEnd = timeline.voiceover_duration ?? (cards[cards.length - 1]?.end ?? 0);
   // 後方互換: 旧形式 card.clip(単一) を card.clips(リスト) に正規化
   // さらにカードレベルの sfx/sfx_volume をクリップレベルに移行
@@ -915,6 +917,13 @@ document.getElementById('previewVideo').addEventListener('timeupdate', function 
   }
 });
 
+document.getElementById('previewVideo').addEventListener('error', () => {
+  const v = document.getElementById('previewVideo');
+  if (!v.src || v.src.endsWith('#')) return;
+  setStatus(showingFinal
+    ? '⚠️ 完成版を読み込めません。「今すぐ更新する」で書き出し直してください'
+    : '⚠️ 素材を再生できません。「🔄 動画素材フォルダを更新」を押してから再度お試しください');
+});
 document.getElementById('videoWrap').addEventListener('click', () => {
   const video = document.getElementById('previewVideo');
   if (video.paused) {
@@ -1254,6 +1263,7 @@ async function _autoRender() {
     const data = await res.json();
 
     if (data.ok) {
+      finalExists = true;
       setRenderStatus('✅ 更新完了', '#f5a623');
       setTimeout(() => setRenderStatus(''), 5000);
       // 更新完了後は常に完成版をプレビューに読み込む（完成版を見ていた場合は同じ位置を復元）
@@ -1406,6 +1416,10 @@ async function renderFinal() {
 }
 
 function showFinal() {
+  if (!finalExists) {
+    setStatus('まだ書き出していません。「今すぐ更新する」を押すと完成版が作成されます');
+    return;
+  }
   const video = document.getElementById('previewVideo');
   currentPlayingFile = null;
   showingFinal = true;
@@ -1418,6 +1432,10 @@ function showFinal() {
 }
 
 function exportReel() {
+  if (!finalExists) {
+    setStatus('まだ書き出していません。「今すぐ更新する」で完成版を作成してから出力してください');
+    return;
+  }
   const a = document.createElement('a');
   a.href = '/api/export';
   a.download = 'reel.mp4';
@@ -1429,6 +1447,11 @@ function exportReel() {
 // カード番号をクリックすると、完成版プレビューをそのカードの位置から再生する。
 // 30枚目のカードを直しても、確認のために毎回頭から再生する必要がなくなる。
 function seekFinal(i) {
+  if (!finalExists) {
+    if (cards[i].clips && cards[i].clips.length) { playSub(i, 0); }
+    else { setStatus('まだ書き出していません。「今すぐ更新する」で完成版を作成できます'); }
+    return;
+  }
   const video = document.getElementById('previewVideo');
   const startAt = cards[i].start;
   playUntil = null;
@@ -1449,6 +1472,12 @@ function seekFinal(i) {
 
 // ▶ 再生ボタン用: final.mp4のそのカード区間だけ再生（効果音込みで確認できる）
 function playCardFinal(i) {
+  // 完成版が未書き出しなら、割り当て済み素材のその区間を代わりに再生する
+  if (!finalExists) {
+    if (cards[i].clips && cards[i].clips.length) { playSub(i, 0); }
+    else { setStatus('素材を割り当ててから再生できます（通し確認は「今すぐ更新する」で書き出し後）'); }
+    return;
+  }
   const video = document.getElementById('previewVideo');
   const startAt = cards[i].start;
   playUntil = cards[i].end;

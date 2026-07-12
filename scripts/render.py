@@ -445,6 +445,15 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
     output_path = Path(output_path)
     work_dir = output_path.parent
 
+    # 未割当てカードのチェック（スキップして書き出すと映像が短くなり
+    # 音声・テロップとズレた動画がサイレントに生成されてしまうため、先に止める）
+    unassigned = [str(idx + 1) for idx, card in enumerate(cards) if not _get_clips(card)]
+    if unassigned:
+        raise RuntimeError(
+            f"素材が未割当てのカードがあります: カット{'、カット'.join(unassigned)}"
+            "。全カードに素材を割り当ててから書き出してください。"
+        )
+
     # 素材の存在チェック（欠損ファイルを生のffmpegエラーにせず分かりやすく報告する）
     missing = []
     for idx, card in enumerate(cards):
@@ -455,6 +464,13 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
         raise RuntimeError(
             "素材が見つかりません: " + "、".join(missing)
             + "。エディタで該当カードに別の素材を割り当ててから書き出してください。"
+        )
+
+    # アフレコ音声の存在チェック（移動・削除されていたら分かりやすく報告する）
+    if voiceover_path and not Path(voiceover_path).exists():
+        raise RuntimeError(
+            f"アフレコ音声が見つかりません: {voiceover_path}"
+            "。ファイルを移動・削除した場合は元に戻すか、プロジェクトを作り直してください。"
         )
 
     segments_to_cut = _flatten_segments(cards, materials_dir, jl_cut_offset)

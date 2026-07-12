@@ -247,6 +247,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/timeline":
             tl = _load_json(work_dir / "timeline.json")
+            tl["final_exists"] = (work_dir / "final.mp4").exists()
             vo = tl.get("voiceover_path")
             if vo:
                 try:

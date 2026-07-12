@@ -6,22 +6,24 @@
 <title>ショート動画エディタ</title>
 <style>
   :root {
-    --bg: #121214;
-    --surface: #1a1a1d;
-    --surface-2: #202024;
-    --surface-3: #26262b;
-    --surface-4: #2e2e35;
-    --border: #2c2c31;
-    --border-soft: #232327;
-    --border-strong: #3d3d45;
-    --text: #e9e9ec;
-    --text-muted: #9a9aa2;
-    --text-faint: #62626a;
-    --accent: #5b8def;
-    --accent-hover: #4a7ade;
-    --accent-soft: rgba(91, 141, 239, 0.14);
-    --danger: #e0626c;
-    --danger-soft: rgba(224, 98, 108, 0.12);
+    /* インスタコンセプト設計ツールと同じ配色（パステル×コーラルCTAの温かいライトテーマ） */
+    --bg: #FDFCFA;
+    --surface: #FFFFFF;
+    --surface-2: #FAFAF7;
+    --surface-3: #FFFFFF;
+    --surface-4: #F5F2EB;
+    --border: #EDEAE4;
+    --border-soft: #F0EDE7;
+    --border-strong: #E3E0D9;
+    --text: #4A4A5A;
+    --text-muted: #8A8A9A;
+    --text-faint: #B5B5C0;
+    --accent: #7EB8E6;
+    --accent-hover: #5FA6DE;
+    --accent-soft: #EAF4FC;
+    --coral: #FF9E9E;
+    --danger: #F08080;
+    --danger-soft: #FFF0F0;
     --radius-sm: 6px;
     --radius-md: 10px;
     --radius-lg: 16px;
@@ -101,9 +103,9 @@
 
   .title-input {
     width: 100%;
-    background: #f3f3f4;
-    color: #1a1a1d;
-    border: 1px solid #c8c8cc;
+    background: #ffffff;
+    color: #4A4A5A;
+    border: 1px solid #E3E0D9;
     border-radius: var(--radius-sm);
     padding: 7px 9px;
     font-size: 14px;
@@ -130,16 +132,16 @@
   button {
     font-family: inherit;
     font-size: 13px;
-    font-weight: 500;
-    border: 1px solid var(--border-strong);
+    font-weight: 600;
+    border: 1.5px solid var(--border-strong);
     background: var(--surface-3);
-    border-radius: var(--radius-sm);
+    border-radius: 999px;
     padding: 9px 14px;
     cursor: pointer;
     color: var(--text);
     transition: background-color 0.12s ease, border-color 0.12s ease;
   }
-  button:hover { background: var(--surface-4); border-color: #4d4d56; }
+  button:hover { background: var(--surface-4); border-color: #C9C4BA; }
   .btn-primary {
     background: var(--accent);
     border-color: var(--accent);
@@ -160,15 +162,18 @@
   }
   .btn-accent-outline:hover { background: var(--accent-soft); }
   .btn-blue {
-    background: #1a6fdb;
-    border-color: #1a6fdb;
+    background: linear-gradient(90deg, var(--coral), #FFB88E);
+    border: none;
     color: #fff;
-    font-weight: 700;
+    font-weight: 800;
     font-size: 14px;
-    padding: 12px 14px;
+    padding: 12px 18px;
     letter-spacing: 0.02em;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(255, 158, 158, 0.4);
+    transition: transform 0.15s;
   }
-  .btn-blue:hover { background: #1559b8; border-color: #1559b8; }
+  .btn-blue:hover { background: linear-gradient(90deg, var(--coral), #FFB88E); transform: translateY(-1px) scale(1.02); }
   button:disabled { opacity: 0.45; cursor: default; }
   #status { font-size: 12px; color: var(--text-muted); margin-top: 10px; min-height: 16px; }
 
@@ -225,20 +230,20 @@
   .card-num {
     display: inline-block;
     color: #fff;
-    font-weight: 700;
+    font-weight: 800;
     cursor: pointer;
-    background: #1a6fdb;
-    border-radius: 5px;
-    padding: 2px 9px;
+    background: linear-gradient(90deg, var(--accent), #9ED2F0);
+    border-radius: 999px;
+    padding: 2px 11px;
     font-size: 13px;
     text-decoration: none !important;
   }
-  .card-num:hover { background: #1559b8; }
+  .card-num:hover { filter: brightness(0.95); }
   .card-text {
     width: 50%;
-    background: #f3f3f4;
-    color: #1a1a1d;
-    border: 1px solid #c8c8cc;
+    background: #ffffff;
+    color: #4A4A5A;
+    border: 1px solid #E3E0D9;
     border-radius: var(--radius-sm);
     padding: 7px 9px;
     font-size: 14px;
@@ -351,7 +356,7 @@
   .btn-zoom { font-size: 12px; padding: 4px 10px; border-radius: var(--radius-sm);
     background: var(--surface-3); border: 1px solid var(--border-strong);
     color: var(--text-muted); cursor: pointer; white-space: nowrap; }
-  .btn-zoom.active { background: #1a3a2a; border-color: #2a6a4a; color: #6fcf97; }
+  .btn-zoom.active { background: #FFF9E8; border-color: #D9A93E; color: #C29438; }
   .zoom-vol { display: flex; align-items: center; gap: 4px; white-space: nowrap; font-size: 11px; color: var(--text-muted); }
   .zoom-vol input[type=range] { width: 70px; accent-color: var(--accent); }
   .zoom-vol input[type=number] { width: 44px; font-size: 11px; padding: 2px 4px; text-align: right;

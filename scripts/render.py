@@ -130,12 +130,10 @@ def extract_video_segment(clip_path: Path, in_point: float, duration: float, out
 
 
 def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list,
-                      output_path: Path, zoom_params: dict = None, overlay: dict = None):
-    """1ユニット分のセグメントをtrim+concat+ズーム+画像オーバーレイ+テロップ合成し、
+                      output_path: Path, zoom_params: dict = None):
+    """1ユニット分のセグメントをtrim+concat+ズーム+テロップ合成し、
     自己完結したmp4を書き出す。zoom_params={'enabled':True,'level':20}のとき、カード全体に
-    ゆっくりズームイン（Ken Burnsエフェクト）をかける。
-    overlay={'path','scale','x','y'}のとき、映像の上に画像を重ねる（scale=横幅比0-1、
-    x/y=画像中心の位置0-1）。テロップより下のレイヤーに合成する。"""
+    ゆっくりズームイン（Ken Burnsエフェクト）をかける。"""
     cmd = ["ffmpeg", "-nostdin", "-y"]
     for f in seg_files:
         cmd += ["-i", str(f)]
@@ -144,11 +142,6 @@ def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list
     cap_base = n
     for seg in caption_segments:
         cmd += ["-i", seg["path"]]
-
-    ovl_idx = None
-    if overlay and overlay.get("path") and Path(overlay["path"]).exists():
-        ovl_idx = n + len(caption_segments)
-        cmd += ["-i", str(overlay["path"])]
 
     stmts = []
     for i, n_frames in enumerate(frame_counts):
@@ -178,15 +171,6 @@ def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list
             f":d=1:fps={RENDER_FPS}:s={WIDTH}x{HEIGHT},format=yuv420p[vzoom]"
         )
         v_label = "vzoom"
-
-    # 画像オーバーレイ（テロップより下＝テロップは常に上に出る）
-    if ovl_idx is not None:
-        ovw = max(2, round(float(overlay.get("scale", 0.8)) * WIDTH))
-        ox = float(overlay.get("x", 0.5))
-        oy = float(overlay.get("y", 0.5))
-        stmts.append(f"[{ovl_idx}:v]scale={ovw}:-1[ovlimg]")
-        stmts.append(f"[{v_label}][ovlimg]overlay=x='{ox:.4f}*W-w/2':y='{oy:.4f}*H-h/2'[vovl]")
-        v_label = "vovl"
 
     prev = v_label
     for k, seg in enumerate(caption_segments):
@@ -381,8 +365,8 @@ def fingerprint_unit(unit_cards: list, unit_segments: list, telop_color: str = N
         "cards": [{"text": c["text"], "tag_filter": c.get("tag_filter"), "title": c.get("title"),
                    "title_typewriter": c.get("title_typewriter", True),
                    "telop_color": c.get("telop_color"), "telop_fontsize": c.get("telop_fontsize"),
-                   "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level"),
-                   "overlay": c.get("overlay")} for c in unit_cards],
+                   "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level")}
+                  for c in unit_cards],
         "segments": [{"file": s["file"], "in": round(s["in"], 4), "frames": s["frames"]}
                      for s in unit_segments],
     }
@@ -427,20 +411,13 @@ def render_unit(unit_cards: list, unit_segments: list, materials_dir: Path,
         raw_level = unit_cards[0].get("zoom_level")
         zoom_params = {"enabled": bool(unit_cards[0].get("zoom")),
                        "level": raw_level if raw_level is not None else 20}
-        # 画像オーバーレイ（card["overlay"]={file,scale,x,y}）。ファイルはmaterials_dir基準。
-        ov = unit_cards[0].get("overlay")
-        overlay_params = None
-        if ov and ov.get("file"):
-            overlay_params = {"path": str(materials_dir / ov["file"]),
-                              "scale": ov.get("scale", 0.8),
-                              "x": ov.get("x", 0.5), "y": ov.get("y", 0.5)}
         # 失敗時に壊れた（0バイト/途中で切れた）mp4がcache_pathに残ると、次回それを
         # "完成済み"として再利用してしまい「moov atom not found」等の二次被害になる。
         # 一時ファイルに書き、成功時のみ同一ディレクトリでアトミックにリネームする。
         tmp_out = cache_dir / f"{fp}.partial.mp4"
         try:
             render_unit_clip(seg_files, frame_counts, caption_segments, tmp_out,
-                             zoom_params, overlay_params)
+                             zoom_params)
             os.replace(tmp_out, cache_path)
         except Exception:
             tmp_out.unlink(missing_ok=True)

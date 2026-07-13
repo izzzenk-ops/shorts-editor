@@ -89,9 +89,11 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
     # 連結すると後半ほどズレが蓄積する（実機で確認済み）。
     # fps=RENDER_FPSで固定フレームレート化する（VFRだとフレーム数換算が
     # ズレるため、後段のフレーム単位trimを正確にするのに必須）
-    cvt = f"{HDR_TO_SDR_VF}," if _is_hdr_source(clip_path) else ""
-    vf = (f"{cvt}scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-          f"crop={WIDTH}:{HEIGHT},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
+    # 色変換は縮小後（出力解像度）にかける。元の4K全画素に色変換すると重いので、
+    # scale/cropで画素数を落としてから colorspace を通すと大幅に速い（実測で短縮）。
+    cvt = f",{HDR_TO_SDR_VF}" if _is_hdr_source(clip_path) else ""
+    vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
+          f"crop={WIDTH}:{HEIGHT}{cvt},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
     af = "asetpts=PTS-STARTPTS"
     # -ar/-acで音声フォーマットを全セグメント共通に揃える。素材ごとにサンプル
     # レート・チャンネル数が違うと、後段のconcatデマルチプレクサ+-c copyで

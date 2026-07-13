@@ -220,9 +220,18 @@ def concat_units_copy(unit_files: list, output_path: Path):
                 # ディレクトリ基準で解決するため、呼び出し元のcwdに関わらず
                 # 動くよう必ず絶対パスに正規化する
                 f.write(f"file '{Path(uf).resolve()}'\n")
+        # output_path は内容ハッシュでキャッシュ再利用されるため、結合中に
+        # 中断されて壊れた半端ファイルが「完成品」として残らないよう、
+        # 一時ファイルに書いてから成功時のみ os.replace で確定する（ユニットと同じ）
+        tmp_out = output_path.with_suffix(".partial.mp4")
         cmd = ["ffmpeg", "-nostdin", "-y", "-f", "concat", "-safe", "0", "-i", str(list_path),
-               "-c", "copy", str(output_path)]
-        subprocess.run(cmd, capture_output=True, check=True)
+               "-c", "copy", str(tmp_out)]
+        try:
+            subprocess.run(cmd, capture_output=True, check=True)
+            os.replace(tmp_out, output_path)
+        except Exception:
+            tmp_out.unlink(missing_ok=True)
+            raise
 
 
 SOUND_DIR = Path.home() / "Documents/Claude/Projects/動画編集/サウンド"

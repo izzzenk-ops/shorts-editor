@@ -453,6 +453,7 @@
   <div id="totalDuration">想定再生時間<span class="value">--</span></div>
   <div id="videoWrap">
     <video id="previewVideo" playsinline></video>
+    <img id="overlayPreview" style="position:absolute;display:none;pointer-events:none;transform:translate(-50%,-50%);">
     <div id="playIcon">▶</div>
   </div>
   <div id="status"></div>
@@ -651,9 +652,10 @@ function renderCards() {
         <div class="card-side-controls">
           <div class="ctrl-row">
             ${zoomRowHtml(card, i)}
-            ${cardColorPickerHtml(card, i)}
+            ${cardOverlayHtml(card, i)}
           </div>
           <div class="ctrl-row">
+            ${cardColorPickerHtml(card, i)}
             ${cardFontSizeHtml(card, i)}
           </div>
         </div>
@@ -897,6 +899,7 @@ function onPanelTitleTypewriterChange(checkbox) {
 function playSegment(file, inPoint, duration) {
   const video = document.getElementById('previewVideo');
   playUntil = null;
+  hideOverlayPreview();  // 素材再生に切り替わるので前カードのオーバーレイ表示は消す
 
   const applyRange = () => {
     video.currentTime = inPoint;
@@ -1406,6 +1409,85 @@ function setCardFontSize(i, size) {
   autosave();
 }
 
+// ── カードに画像を重ねる（オーバーレイ）──────────────
+function cardOverlayHtml(card, i) {
+  const imgs = materials.filter(m => m.is_image);
+  const ov = card.overlay;
+  const opts = ['<option value="">重ねる画像なし</option>'].concat(
+    imgs.map(m => `<option value="${m.file}" ${ov && ov.file === m.file ? 'selected' : ''}>${m.file}</option>`)
+  ).join('');
+  let sliders = '';
+  if (ov && ov.file) {
+    const pct = v => Math.round(v * 100);
+    sliders = `
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">
+        <span style="font-size:11px;color:var(--text-muted)">サイズ</span>
+        <input type="range" min="10" max="100" value="${pct(ov.scale)}" style="width:80px"
+          oninput="setOverlayParam(${i},'scale',this.value/100)">
+        <span style="font-size:11px;color:var(--text-muted)">横</span>
+        <input type="range" min="0" max="100" value="${pct(ov.x)}" style="width:70px"
+          oninput="setOverlayParam(${i},'x',this.value/100)">
+        <span style="font-size:11px;color:var(--text-muted)">縦</span>
+        <input type="range" min="0" max="100" value="${pct(ov.y)}" style="width:70px"
+          oninput="setOverlayParam(${i},'y',this.value/100)">
+        <button onclick="previewOverlay(${i})" style="font-size:11px;padding:3px 10px">▶ 位置を確認</button>
+      </div>`;
+  }
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">画像を重ねる</span>
+    <select onchange="setCardOverlay(${i},this.value)">${opts}</select>${sliders}</div>`;
+}
+
+function setCardOverlay(i, file) {
+  if (!file) {
+    delete cards[i].overlay;
+    hideOverlayPreview();
+  } else {
+    const cur = cards[i].overlay || {};
+    cards[i].overlay = { file, scale: cur.scale ?? 0.8, x: cur.x ?? 0.5, y: cur.y ?? 0.5 };
+  }
+  renderCards();
+  if (cards[i].overlay) previewOverlay(i);
+  autosave();
+}
+
+function setOverlayParam(i, key, val) {
+  if (!cards[i].overlay) return;
+  cards[i].overlay[key] = Number(val);
+  updateOverlayPreview(cards[i]);   // ドラッグ中はライブでプレビューだけ更新
+  scheduleOverlaySave();
+}
+
+let _ovlSaveTimer = null;
+function scheduleOverlaySave() {
+  clearTimeout(_ovlSaveTimer);
+  _ovlSaveTimer = setTimeout(() => autosave(), 400);
+}
+
+// カードの映像を左プレビューで再生しつつ、その上に画像を重ねて位置確認する
+function previewOverlay(i) {
+  const card = cards[i];
+  if (!card.overlay) return;
+  const clip = card.clips[0];
+  if (clip) playSegment(clip.file, clip.in, clip.duration);
+  updateOverlayPreview(card);
+}
+
+function updateOverlayPreview(card) {
+  const img = document.getElementById('overlayPreview');
+  if (!card.overlay || !card.overlay.file) { img.style.display = 'none'; return; }
+  const ov = card.overlay;
+  img.src = `/api/frame?clip=${encodeURIComponent(ov.file)}&n=0`;
+  img.style.left = (ov.x * 100) + '%';
+  img.style.top = (ov.y * 100) + '%';
+  img.style.width = (ov.scale * 100) + '%';
+  img.style.display = 'block';
+}
+
+function hideOverlayPreview() {
+  document.getElementById('overlayPreview').style.display = 'none';
+}
+
 // ── 素材フォルダの手動再読み込み ──────────────────────
 async function rescanMaterials() {
   const btn = document.getElementById('rescanBtn');
@@ -1457,6 +1539,7 @@ async function renderFinal() {
 }
 
 function showFinal() {
+  hideOverlayPreview();
   if (!finalExists) {
     setStatus('まだ書き出していません。「今すぐ更新する」を押すと完成版が作成されます');
     return;
@@ -1488,6 +1571,7 @@ function exportReel() {
 // カード番号をクリックすると、完成版プレビューをそのカードの位置から再生する。
 // 30枚目のカードを直しても、確認のために毎回頭から再生する必要がなくなる。
 function seekFinal(i) {
+  hideOverlayPreview();
   if (!finalExists) {
     if (cards[i].clips && cards[i].clips.length) { playSub(i, 0); }
     else { setStatus('まだ書き出していません。「今すぐ更新する」で完成版を作成できます'); }
@@ -1513,6 +1597,7 @@ function seekFinal(i) {
 
 // ▶ 再生ボタン用: final.mp4のそのカード区間だけ再生（効果音込みで確認できる）
 function playCardFinal(i) {
+  hideOverlayPreview();
   // 完成版が未書き出しなら、割り当て済み素材のその区間を代わりに再生する
   if (!finalExists) {
     if (cards[i].clips && cards[i].clips.length) { playSub(i, 0); }

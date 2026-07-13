@@ -258,9 +258,16 @@
   .card-side-controls {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 10px;
     flex: 1;
     min-width: 0;
+  }
+  .ctrl-row {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    row-gap: 8px;
   }
   .clip-row {
     margin-top: 8px;
@@ -630,12 +637,14 @@ function renderCards() {
         <textarea class="card-text" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
           title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
         <div class="card-side-controls">
-          ${zoomRowHtml(card, i)}
-          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <div class="ctrl-row">
+            ${zoomRowHtml(card, i)}
+            ${cardOverlayHtml(card, i)}
+          </div>
+          <div class="ctrl-row">
             ${cardColorPickerHtml(card, i)}
             ${cardFontSizeHtml(card, i)}
           </div>
-          ${cardOverlayHtml(card, i)}
         </div>
       </div>
       ${blocks || emptyClipHtml(i)}

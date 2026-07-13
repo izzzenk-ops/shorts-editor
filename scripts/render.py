@@ -51,36 +51,6 @@ def quantize_durations(durations: list, fps: int = RENDER_FPS) -> list:
     return out
 
 
-# HLG/PQ等のHDR素材（iPhoneのHDR撮影など）はBT.2020/HLGのままH.264にすると
-# ブラウザが色を正しく変換できず赤っぽくなる。BT.709 SDRに変換してからエンコードする。
-# このffmpegはzscale/libplaceboが無いため、colorspaceフィルタでHLGをbt2020-10近似として
-# 扱い、原色（赤かぶりの主因）をBT.709へ変換する（トーンはわずかに近似だが実用上十分）。
-_HDR_CACHE = {}
-
-
-def _is_hdr_source(clip_path: Path) -> bool:
-    key = str(clip_path)
-    if key in _HDR_CACHE:
-        return _HDR_CACHE[key]
-    hdr = False
-    try:
-        r = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=color_primaries,color_transfer",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(clip_path)],
-            capture_output=True, text=True)
-        out = r.stdout.lower()
-        hdr = ("bt2020" in out) or ("arib-std-b67" in out) or ("smpte2084" in out)
-    except Exception:
-        hdr = False
-    _HDR_CACHE[key] = hdr
-    return hdr
-
-
-# HDR素材に前置する色変換フィルタ（BT.2020/HLG → BT.709 SDR）
-HDR_TO_SDR_VF = "colorspace=iall=bt2020:all=bt709:format=yuv420p"
-
-
 def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Path,
                   input_side_seek: bool) -> None:
     # setpts/asetpts でPTSを必ず0始まりに正規化する。入力側シークは目的の時刻の
@@ -89,11 +59,8 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
     # 連結すると後半ほどズレが蓄積する（実機で確認済み）。
     # fps=RENDER_FPSで固定フレームレート化する（VFRだとフレーム数換算が
     # ズレるため、後段のフレーム単位trimを正確にするのに必須）
-    # 色変換は縮小後（出力解像度）にかける。元の4K全画素に色変換すると重いので、
-    # scale/cropで画素数を落としてから colorspace を通すと大幅に速い（実測で短縮）。
-    cvt = f",{HDR_TO_SDR_VF}" if _is_hdr_source(clip_path) else ""
     vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-          f"crop={WIDTH}:{HEIGHT}{cvt},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
+          f"crop={WIDTH}:{HEIGHT},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
     af = "asetpts=PTS-STARTPTS"
     # -ar/-acで音声フォーマットを全セグメント共通に揃える。素材ごとにサンプル
     # レート・チャンネル数が違うと、後段のconcatデマルチプレクサ+-c copyで

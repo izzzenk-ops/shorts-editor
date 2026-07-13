@@ -200,29 +200,6 @@ def scan_and_register_materials() -> dict:
     return data
 
 
-_HDR_CACHE = {}
-
-
-def _is_hdr_source(clip_path: Path) -> bool:
-    """HLG/PQ等のHDR素材（BT.2020/HLG/PQ）か判定する。"""
-    key = str(clip_path)
-    if key in _HDR_CACHE:
-        return _HDR_CACHE[key]
-    hdr = False
-    try:
-        r = subprocess.run(
-            ["ffprobe", "-v", "error", "-select_streams", "v:0",
-             "-show_entries", "stream=color_primaries,color_transfer",
-             "-of", "default=noprint_wrappers=1:nokey=1", str(clip_path)],
-            capture_output=True, text=True)
-        out = r.stdout.lower()
-        hdr = ("bt2020" in out) or ("arib-std-b67" in out) or ("smpte2084" in out)
-    except Exception:
-        hdr = False
-    _HDR_CACHE[key] = hdr
-    return hdr
-
-
 def _get_preview_proxy(filename: str) -> Path:
     """カメラ直撮り素材は10bit HEVC等、ブラウザが直接デコードできない形式の
     ことがある（実機テストで発覚：MEDIA_ELEMENT_ERROR）。エディタのプレビュー用に
@@ -249,12 +226,8 @@ def _get_preview_proxy(filename: str) -> Path:
                    "-c:a", "aac", "-b:a", "128k",
                    str(tmp_path)]
         else:
-            # HLG/PQ等のHDR素材（iPhone HDR撮影）はBT.2020/HLGのままだとブラウザで
-            # 赤っぽくなる。BT.709 SDRに変換してからプロキシ化する（render.pyと同じ扱い）。
-            # 色変換は縮小後にかける（4K全画素だと重いので画素数を落としてから通す）。
-            cvt = ",colorspace=iall=bt2020:all=bt709:format=yuv420p" if _is_hdr_source(src) else ""
             cmd = ["ffmpeg", "-y", "-i", str(src),
-                   "-vf", f"scale=-2:960{cvt}",
+                   "-vf", "scale=-2:960",
                    "-c:v", "h264_videotoolbox", "-q:v", "65",
                    "-c:a", "aac", "-b:a", "128k",
                    str(tmp_path)]

@@ -530,6 +530,19 @@ async function loadAll() {
   materials = materialsRes.clips.sort((a, b) => a.sequence_no - b.sequence_no);
   renderCards();
   updateTotalDuration();
+
+  // カード内のどのコントロールを操作しても、そのカードを「最後に編集したカード」
+  // として記録する（イベント委譲。cardPanel自体は再描画で消えないので一度だけ登録）。
+  // これで更新完了後、編集したカットにプレビューを合わせられる。
+  const panel = document.getElementById('cardPanel');
+  const markCard = (e) => {
+    const cardEl = e.target.closest('.card');
+    if (!cardEl) return;
+    const idx = parseInt(cardEl.id.replace('card-', ''), 10);
+    if (!Number.isNaN(idx)) _lastEditedCard = idx;
+  };
+  panel.addEventListener('focusin', markCard);
+  panel.addEventListener('input', markCard);
 }
 
 function fmtTime(sec) {
@@ -1244,6 +1257,9 @@ let _saveTimer = null;
 let _renderTimer = null;
 let _rendering = false;
 let _pendingRender = false;
+// 最後に操作したカードのindex。更新完了後、プレビューをこのカードの位置へ
+// 合わせるために使う（編集したカットが確認画面に出るようにする）
+let _lastEditedCard = null;
 
 function scheduleAutoRender(delay) {
   clearTimeout(_renderTimer);
@@ -1278,11 +1294,21 @@ async function _autoRender() {
       finalExists = true;
       setRenderStatus('✅ 更新完了', '#f5a623');
       setTimeout(() => setRenderStatus(''), 5000);
-      // 更新完了後は常に完成版をプレビューに読み込む（完成版を見ていた場合は同じ位置を復元）
+      // 更新完了後は完成版をプレビューに読み込む。
+      // 編集したカットが分かっていれば、その位置に合わせて確認できるようにする
+      // （直前に停止していた無関係な位置を復元してしまう問題への対策）。
+      // 編集カットが不明な場合のみ、完成版を見ていた位置を復元する。
       currentPlayingFile = null;
       showingFinal = true;
       video.src = `/api/final?t=${Date.now()}`;
-      if (wasFinal) {
+      const edited = _lastEditedCard;
+      if (edited != null && cards[edited]) {
+        playUntil = cards[edited].end;
+        video.addEventListener('loadedmetadata', () => {
+          video.currentTime = cards[edited].start;
+          video.play().catch(() => {});
+        }, { once: true });
+      } else if (wasFinal) {
         video.addEventListener('loadedmetadata', () => {
           video.currentTime = savedTime;
         }, { once: true });

@@ -930,7 +930,10 @@ function playSub(i, k) {
 }
 
 document.getElementById('previewVideo').addEventListener('playing', () => {
-  if (document.getElementById('status').textContent.startsWith('読み込み中')) {
+  // 実際に再生できている＝読み込めているので、「読み込み中」や
+  // 「読み込めません」等の警告が残っていれば消す（矛盾表示の防止）
+  const t = document.getElementById('status').textContent;
+  if (t.startsWith('読み込み中') || t.startsWith('⚠️')) {
     setStatus('');
   }
 });
@@ -1292,6 +1295,9 @@ async function _autoRender() {
 
     if (data.ok) {
       finalExists = true;
+      // 更新に成功したので、古い「完成版を読み込めません」等の警告があれば消す
+      // （成功メッセージと矛盾する警告が重なって表示されるのを防ぐ）
+      setStatus('');
       setRenderStatus('✅ 更新完了', '#f5a623');
       setTimeout(() => setRenderStatus(''), 5000);
       // 更新完了後は完成版をプレビューに読み込む。

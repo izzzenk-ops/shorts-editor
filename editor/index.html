@@ -602,7 +602,7 @@ function clipBlockHtml(card, i, k, footHtml) {
             ${clip.file} ${isImg ? '🖼 画像' : `@${(clip.in || 0).toFixed(2)}s`}, ${(clip.duration || 0).toFixed(2)}s
           </div>
           <div class="clip-actions-buttons">
-            <button onclick="playCardFinal(${i})">▶ 再生</button>
+            <button onclick="playCardFinal(${i},${k})">▶ 再生</button>
             ${isImg ? '' : `<button onclick="toggleTrim(${i},${k})">✂️ トリム</button>`}
             <button onclick="swapSub(${i},${k})">🔄 別素材</button>
             <select onchange="selectFileSub(${i},${k},this.value)">${fileOptions}</select>
@@ -1595,18 +1595,28 @@ function seekFinal(i) {
   }
 }
 
-// ▶ 再生ボタン用: final.mp4のそのカード区間だけ再生（効果音込みで確認できる）
-function playCardFinal(i) {
+// ▶ 再生ボタン用: final.mp4のその区間だけ再生（効果音込みで確認できる）。
+// k を渡すとカード内のそのサブクリップの区間だけ、省略時はカード全体を再生する。
+function playCardFinal(i, k = null) {
   hideOverlayPreview();
   // 完成版が未書き出しなら、割り当て済み素材のその区間を代わりに再生する
   if (!finalExists) {
-    if (cards[i].clips && cards[i].clips.length) { playSub(i, 0); }
+    if (cards[i].clips && cards[i].clips.length) { playSub(i, k ?? 0); }
     else { setStatus('素材を割り当ててから再生できます（通し確認は「今すぐ更新する」で書き出し後）'); }
     return;
   }
   const video = document.getElementById('previewVideo');
-  const startAt = cards[i].start;
-  playUntil = cards[i].end;
+  let startAt = cards[i].start;
+  let endAt = cards[i].end;
+  if (k != null) {
+    // カード先頭からサブクリップkまでの尺を足した位置がkの開始位置
+    const clips = cards[i].clips || [];
+    let off = 0;
+    for (let j = 0; j < k && j < clips.length; j++) off += (clips[j].duration || 0);
+    startAt = cards[i].start + off;
+    endAt = startAt + (clips[k] ? (clips[k].duration || 0) : 0);
+  }
+  playUntil = endAt;
 
   if (!showingFinal) {
     currentPlayingFile = null;

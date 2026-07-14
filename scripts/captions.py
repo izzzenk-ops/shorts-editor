@@ -119,7 +119,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
 TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
-TELOP_STYLE_VERSION = "v18-telop-effects"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
+TELOP_STYLE_VERSION = "v19-telop-effects-smooth"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
 def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int = 1920,
@@ -208,35 +208,51 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
 
 # カット頭のテロップ演出。映像は動かさず、テロップPNGだけをアニメーションさせる。
 # タイプライターと同じ「短時間ずつ差し替え表示」の仕組みで実現する。
-EFFECT_FRAMES = 8       # アニメのコマ数
-EFFECT_DUR = 0.30       # アニメの長さ（秒）。カードが短ければ尺の4割に収める
+# 一瞬で終わらず、なめらかに・減衰しながら動くよう、演出ごとに長さを持たせて
+# 動画フレーム相当のコマ数（尺×30）を生成する（progressは0→1）。
+ANIM_FPS = 30
+EFFECT_DURS = {"zoom_punch": 0.55, "shake": 0.75, "flash": 0.6}
+EFFECT_DUR_DEFAULT = 0.5
 
 
-def _apply_telop_effect(base_img, effect: str, k: int, n: int):
-    """ベースのテロップPNG(base_img)を、演出effectのkコマ目(全nコマ)に変換して返す。"""
+def _apply_telop_effect(base_img, effect: str, progress: float):
+    """ベースのテロップPNG(base_img)を、演出effectの進行度progress(0→1)に変換して返す。
+    progress=1で必ずベース（変化なし）に収束するようにして、静止表示へ自然につなぐ。"""
     from PIL import Image
     import math
     W, H = base_img.size
-    p = k / max(1, n - 1)  # 0→1
+    p = max(0.0, min(1.0, progress))
     if effect == "zoom_punch":
-        scale = 1.0 + 0.30 * (1 - p)  # 1.30倍→等倍
-        if scale <= 1.001:
+        # 大きく出て、ゆっくり標準へ収まる（ease-out。終盤ほど動きが緩やか）
+        scale = 1.0 + 0.34 * (1 - p) ** 2
+        if scale <= 1.002:
             return base_img
         sw, sh = round(W * scale), round(H * scale)
         scaled = base_img.resize((sw, sh), Image.LANCZOS)
         left, top = (sw - W) // 2, (sh - H) // 2
         return scaled.crop((left, top, left + W, top + H))
     if effect == "shake":
-        amp = 18 * (1 - p)  # 揺れ幅が減衰
-        dx = round(amp * math.sin(k * 1.9))
-        dy = round(amp * math.cos(k * 2.3))
+        # 減衰しながら数回ぐわーっと揺れて収まる（振幅は指数減衰、複数往復）
+        amp = 26 * math.exp(-3.2 * p)
+        ang = p * math.pi * 2 * 3.5  # 約3.5往復
+        dx = round(amp * math.sin(ang))
+        dy = round(amp * 0.55 * math.sin(ang * 1.7 + 0.7))
+        if dx == 0 and dy == 0:
+            return base_img
         canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         canvas.alpha_composite(base_img, (dx, dy))
         return canvas
     if effect == "flash":
-        # 点滅（2コマ単位でon/off）。最後の2コマは必ずonにして点灯で終わる
-        visible = (k >= n - 2) or ((k // 2) % 2 == 0)
-        return base_img if visible else Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        # やわらかく数回明滅して点灯（ハードな点滅でなくアルファのパルス）。progress=1で全表示
+        osc = abs(math.sin(p * math.pi * 3.0))  # 0..1を数回
+        a = osc + (1 - osc) * p  # 終盤ほど1.0へ寄る
+        a = max(0.0, min(1.0, a))
+        if a >= 0.99:
+            return base_img
+        alpha = base_img.getchannel("A").point(lambda v: int(v * a))
+        out = base_img.copy()
+        out.putalpha(alpha)
+        return out
     return base_img
 
 
@@ -314,15 +330,17 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
 
         effect = card.get("effect")
         card_dur = card["end"] - card["start"]
-        if effect and card_dur > 0.15:
+        if effect and card_dur > 0.2:
             # カット頭でテロップ文字をアニメーション（映像は動かさない）。
+            # 動画フレーム相当のコマ数で、なめらかに・減衰しながら動かす。
             # 各コマを短時間ずつ差し替え表示→残り時間は静止のベースPNG。
-            anim_dur = min(EFFECT_DUR, card_dur * 0.4)
-            n = EFFECT_FRAMES
+            anim_dur = min(EFFECT_DURS.get(effect, EFFECT_DUR_DEFAULT), card_dur * 0.8)
+            n = max(2, round(anim_dur * ANIM_FPS))
             interval = anim_dur / n
             t = card["start"]
             for k in range(n):
-                frame_img = _apply_telop_effect(base_img, effect, k, n)
+                progress = k / (n - 1) if n > 1 else 1.0
+                frame_img = _apply_telop_effect(base_img, effect, progress)
                 fpath = captions_dir / f"card_{card['id']:03d}_eff{k:02d}.png"
                 frame_img.save(fpath)
                 seg_end = round(t + interval, 4)

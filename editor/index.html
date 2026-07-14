@@ -254,6 +254,8 @@
     padding: 2px 11px;
     font-size: 13px;
     text-decoration: none !important;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
   .card-num:hover { filter: brightness(0.95); }
   .card-text {
@@ -578,7 +580,7 @@ function fmtTime(sec) {
 
 function updateTotalDuration() {
   const total = cards.length ? cards[cards.length - 1].end : 0;
-  document.getElementById('totalDuration').innerHTML = `想定再生時間<span class="value">${fmtTime(total)}</span><span class="value" style="margin-left:12px">${cards.length}カット</span>`;
+  document.getElementById('totalDuration').innerHTML = `想定再生時間<span class="value">${fmtTime(total)}</span><span class="value" style="margin-left:12px">${cards.length}カード</span>`;
 }
 
 function clipFullDuration(filename) {
@@ -666,13 +668,12 @@ function renderCards() {
     div.innerHTML = `
       <div class="card-header">
         <span class="card-num"
-              onclick="seekFinal(${i})" title="完成版プレビューをこのカードの位置から再生">カット${i + 1}</span>
+              onclick="seekFinal(${i})" title="完成版プレビューをこのカードの位置から再生">カード${i + 1}</span>
         <span>${card.start.toFixed(2)}s 〜 ${card.end.toFixed(2)}s</span>
         <span>${(card.end - card.start).toFixed(2)}s</span>
         <span>${card.text.length}字</span>
         <div class="header-controls">
           ${zoomRowHtml(card, i)}
-          ${cardOverlayHtml(card, i)}
         </div>
       </div>
       <textarea class="card-text card-text-full" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
@@ -686,6 +687,9 @@ function renderCards() {
         <div class="ctrl-row">
           ${cardBoxHtml(card, i)}
           ${cardEffectHtml(card, i)}
+        </div>
+        <div class="ctrl-row">
+          ${cardOverlayHtml(card, i)}
         </div>
       </div>
       ${blocks || emptyClipHtml(i)}

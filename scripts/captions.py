@@ -119,7 +119,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
 TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
-TELOP_STYLE_VERSION = "v19-telop-effects-smooth"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
+TELOP_STYLE_VERSION = "v20-telop-effects-bigger"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
 def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int = 1920,
@@ -223,8 +223,8 @@ def _apply_telop_effect(base_img, effect: str, progress: float):
     W, H = base_img.size
     p = max(0.0, min(1.0, progress))
     if effect == "zoom_punch":
-        # 大きく出て、ゆっくり標準へ収まる（ease-out。終盤ほど動きが緩やか）
-        scale = 1.0 + 0.34 * (1 - p) ** 2
+        # 大きく出て、ゆっくり標準へ収まる（ease-out。終盤ほど動きが緩やか）。大げさに1.6倍から
+        scale = 1.0 + 0.60 * (1 - p) ** 2
         if scale <= 1.002:
             return base_img
         sw, sh = round(W * scale), round(H * scale)
@@ -232,20 +232,20 @@ def _apply_telop_effect(base_img, effect: str, progress: float):
         left, top = (sw - W) // 2, (sh - H) // 2
         return scaled.crop((left, top, left + W, top + H))
     if effect == "shake":
-        # 減衰しながら数回ぐわーっと揺れて収まる（振幅は指数減衰、複数往復）
-        amp = 26 * math.exp(-3.2 * p)
-        ang = p * math.pi * 2 * 3.5  # 約3.5往復
+        # 減衰しながら数回ぐわーっと大きく揺れて収まる（振幅は指数減衰、複数往復）
+        amp = 55 * math.exp(-2.8 * p)
+        ang = p * math.pi * 2 * 4.0  # 約4往復
         dx = round(amp * math.sin(ang))
-        dy = round(amp * 0.55 * math.sin(ang * 1.7 + 0.7))
+        dy = round(amp * 0.6 * math.sin(ang * 1.7 + 0.7))
         if dx == 0 and dy == 0:
             return base_img
         canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         canvas.alpha_composite(base_img, (dx, dy))
         return canvas
     if effect == "flash":
-        # やわらかく数回明滅して点灯（ハードな点滅でなくアルファのパルス）。progress=1で全表示
-        osc = abs(math.sin(p * math.pi * 3.0))  # 0..1を数回
-        a = osc + (1 - osc) * p  # 終盤ほど1.0へ寄る
+        # やわらかく数回明滅して点灯（progress=1で全表示）。谷を深くして大げさに
+        osc = abs(math.sin(p * math.pi * 3.5))  # 0..1を数回（明滅回数を増やす）
+        a = (osc ** 0.6) + (1 - osc ** 0.6) * (p ** 1.5)  # 谷は深く、終盤で1.0へ
         a = max(0.0, min(1.0, a))
         if a >= 0.99:
             return base_img

@@ -119,7 +119,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
 TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
-TELOP_STYLE_VERSION = "v16-shadow0.9-box"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
+TELOP_STYLE_VERSION = "v17-box30-square"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
 def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int = 1920,
@@ -176,9 +176,9 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
 
         if box_mode and (line or "").strip():
             gl = (width - lw) // 2
-            bdraw.rounded_rectangle(
+            bdraw.rectangle(
                 [gl - pad_x, y - pad_y, gl + lw + pad_x, y + lh + pad_y],
-                radius=round(fontsize * 0.22), fill=(0, 0, 0, 128))  # 黒・不透明度50%
+                fill=(0, 0, 0, 77))  # 黒・不透明度30%・角丸なし
 
         # シャドウレイヤーに描画（ブラー後に3回alpha_compositeして強いハローにする）
         sdraw.text((x, yd), line or " ", font=font, fill=(*shadow_rgb, 255))

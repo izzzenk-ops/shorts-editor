@@ -272,6 +272,9 @@
   .card-text:focus { outline: none; border-color: var(--accent); }
   .card-text-row { display: flex; gap: 14px; align-items: flex-start; margin-top: 8px; }
   .card-text-row .card-text { flex: 0 0 38%; width: auto; margin: 0; }
+  .header-controls { display: flex; align-items: center; gap: 14px; margin-left: auto; flex-wrap: wrap; row-gap: 6px; }
+  .card-text-full { width: 100%; margin-top: 8px; }
+  .card-controls-below { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
   .card-side-controls {
     display: flex;
     flex-direction: column;
@@ -667,26 +670,22 @@ function renderCards() {
         <span>${card.start.toFixed(2)}s 〜 ${card.end.toFixed(2)}s</span>
         <span>${(card.end - card.start).toFixed(2)}s</span>
         <span>${card.text.length}字</span>
+        <div class="header-controls">
+          ${zoomRowHtml(card, i)}
+          ${cardOverlayHtml(card, i)}
+        </div>
       </div>
-      <div class="card-text-row">
-        <textarea class="card-text" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
-          title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
-        <div class="card-side-controls">
-          <div class="ctrl-row">
-            ${zoomRowHtml(card, i)}
-            ${cardOverlayHtml(card, i)}
-          </div>
-          <div class="ctrl-row">
-            ${cardColorPickerHtml(card, i)}
-            ${cardFontSizeHtml(card, i)}
-          </div>
-          <div class="ctrl-row">
-            ${cardFontHtml(card, i)}
-            ${cardBoxHtml(card, i)}
-          </div>
-          <div class="ctrl-row">
-            ${cardEffectHtml(card, i)}
-          </div>
+      <textarea class="card-text card-text-full" rows="1" oninput="onTextInput(${i}, this)" onchange="autosave()"
+        title="長い場合は自動で2行に折り返されます。Enterで改行位置を指定することもできます">${card.text}</textarea>
+      <div class="card-controls-below">
+        <div class="ctrl-row">
+          ${cardColorPickerHtml(card, i)}
+          ${cardFontSizeHtml(card, i)}
+          ${cardFontHtml(card, i)}
+        </div>
+        <div class="ctrl-row">
+          ${cardBoxHtml(card, i)}
+          ${cardEffectHtml(card, i)}
         </div>
       </div>
       ${blocks || emptyClipHtml(i)}

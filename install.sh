@@ -17,6 +17,17 @@ else
   echo "✅ ffmpeg は導入済みです"
 fi
 
+# 1-b. HDR色変換の案内（iPhoneのHDR撮影素材向け）
+if ffmpeg -hide_banner -filters 2>/dev/null | grep -q zscale; then
+  echo "✅ HDR素材の正確な色変換に対応しています（zscale）"
+else
+  echo "ℹ️ iPhoneのHDR撮影（HLG）素材の色を正確に出したい場合は、追加で"
+  echo "     ./install_hdr_ffmpeg.sh"
+  echo "   を実行してください（ffmpegを再ビルドするため時間がかかります）。"
+  echo "   実行しなくてもツールは動きます（HDR素材は近似変換になります）。"
+  echo "   ※そもそもiPhoneのHDRビデオ撮影をオフにするのが一番確実です。"
+fi
+
 # 2. Python venv
 echo ""
 echo "🐍 Python 仮想環境を作成中..."

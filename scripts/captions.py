@@ -119,7 +119,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
 TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
-TELOP_STYLE_VERSION = "v15-fs45-yoff112-ls20"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
+TELOP_STYLE_VERSION = "v16-shadow0.9-box"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
 def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int = 1920,
@@ -155,17 +155,30 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     else:
         y_start = (height - total_h) // 2 + round(2.5 * fontsize)
 
+    box_mode = bool(effective_style.get("box"))
+
     # シャドウレイヤー: 同位置に3回重ね描きしてから大きいブラーで均一なアウターグロー
     shadow_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     sdraw = ImageDraw.Draw(shadow_layer)
     text_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
     tdraw = ImageDraw.Draw(text_layer)
+    # 背景ボックス（半透明・行ごとに文字へ程よくフィット）
+    box_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    bdraw = ImageDraw.Draw(box_layer)
+    pad_x = round(fontsize * 0.30)
+    pad_y = round(fontsize * 0.12)
 
     y = y_start
     for i, (line, bbox, lh) in enumerate(zip(lines, line_metrics, line_heights)):
         lw = bbox[2] - bbox[0]
         x = (width - lw) // 2 - bbox[0]
         yd = y - bbox[1]
+
+        if box_mode and (line or "").strip():
+            gl = (width - lw) // 2
+            bdraw.rounded_rectangle(
+                [gl - pad_x, y - pad_y, gl + lw + pad_x, y + lh + pad_y],
+                radius=round(fontsize * 0.22), fill=(0, 0, 0, 128))  # 黒・不透明度50%
 
         # シャドウレイヤーに描画（ブラー後に3回alpha_compositeして強いハローにする）
         sdraw.text((x, yd), line or " ", font=font, fill=(*shadow_rgb, 255))
@@ -174,14 +187,19 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
 
         y += lh + (line_spacing if i < len(lines) - 1 else 0)
 
-    # radius=35で広いソフトアウターグロー
-    blurred_shadow = shadow_layer.filter(ImageFilter.GaussianBlur(radius=35))
-
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
-    # blurred_shadowを3回重ねて合成することで影を強くする
-    for _ in range(3):
-        img.alpha_composite(blurred_shadow)
-    img.alpha_composite(text_layer)
+    if box_mode:
+        # 背景ボックスがコントラストを作るのでグローは付けず、箱→文字の順に合成
+        img.alpha_composite(box_layer)
+        img.alpha_composite(text_layer)
+    else:
+        # radius=35で広いソフトアウターグロー。影の濃さは0.9倍（10%薄く）
+        blurred_shadow = shadow_layer.filter(ImageFilter.GaussianBlur(radius=35))
+        a = blurred_shadow.getchannel("A").point(lambda v: int(v * 0.9))
+        blurred_shadow.putalpha(a)
+        for _ in range(3):
+            img.alpha_composite(blurred_shadow)
+        img.alpha_composite(text_layer)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
@@ -215,6 +233,8 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
         fp, fi = resolve_font(card.get("telop_font"))
         s["font_path"] = fp
         s["font_index"] = fi
+        if card.get("telop_box"):
+            s["box"] = True
         return s
 
     segments = []

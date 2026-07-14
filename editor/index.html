@@ -682,6 +682,7 @@ function renderCards() {
           </div>
           <div class="ctrl-row">
             ${cardFontHtml(card, i)}
+            ${cardBoxHtml(card, i)}
           </div>
           <div class="ctrl-row">
             ${cardEffectHtml(card, i)}
@@ -1500,6 +1501,27 @@ function cardEffectHtml(card, i) {
 
 function setCardEffect(i, val) {
   cards[i].effect = val;
+  renderCards();
+  autosave();
+}
+
+// テロップの装飾（標準=グロー／背景ボックス=半透明の箱）
+function cardBoxHtml(card, i) {
+  const on = !!card.telop_box;
+  const opts = [{ name: '標準', v: false }, { name: '背景ボックス', v: true }];
+  const btns = opts.map(o => {
+    const active = on === o.v;
+    return `<button onclick="setCardBox(${i},${o.v})"
+      style="padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;
+      border:1px solid ${active ? 'var(--accent)' : 'var(--border-strong)'};
+      background:${active ? 'var(--accent-soft)' : 'var(--surface-3)'};color:var(--text)">${o.name}</button>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">装飾</span>${btns}</div>`;
+}
+
+function setCardBox(i, v) {
+  cards[i].telop_box = v;
   renderCards();
   autosave();
 }

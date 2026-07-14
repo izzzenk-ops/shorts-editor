@@ -408,7 +408,7 @@ def fingerprint_unit(unit_cards: list, unit_segments: list, telop_color: str = N
         "cards": [{"text": c["text"], "tag_filter": c.get("tag_filter"), "title": c.get("title"),
                    "title_typewriter": c.get("title_typewriter", True),
                    "telop_color": c.get("telop_color"), "telop_fontsize": c.get("telop_fontsize"),
-                   "telop_font": c.get("telop_font"),
+                   "telop_font": c.get("telop_font"), "telop_box": c.get("telop_box"),
                    "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level"),
                    "effect": c.get("effect"),
                    "overlay": c.get("overlay")} for c in unit_cards],

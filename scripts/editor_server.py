@@ -335,7 +335,9 @@ class Handler(BaseHTTPRequestHandler):
             self._serve_range_file(sound_path)
 
         elif path == "/api/export":
-            final_path = work_dir / "final.mp4"
+            # 色補正版(final_export.mp4)があればそれを、無ければ通常final.mp4を配信
+            export_path = work_dir / "final_export.mp4"
+            final_path = export_path if export_path.exists() else (work_dir / "final.mp4")
             if not final_path.exists():
                 self.send_response(404)
                 self.end_headers()
@@ -372,6 +374,9 @@ class Handler(BaseHTTPRequestHandler):
 
         elif self.path == "/api/render":
             self._handle_render(data)
+
+        elif self.path == "/api/export_render":
+            self._handle_export_render(data)
 
         elif self.path == "/api/rescan":
             result = scan_and_register_materials()
@@ -456,6 +461,19 @@ class Handler(BaseHTTPRequestHandler):
             render_timeline(timeline["cards"], materials_dir, work_dir / "final.mp4",
                              voiceover_path, jl_cut_offset)
             self._send_json({"ok": True, "output": str(work_dir / "final.mp4")})
+        except Exception as e:
+            self._send_json({"ok": False, "error": str(e)})
+
+    def _handle_export_render(self, data: dict):
+        """動画出力用のレンダー。HDR素材だけBT.709へ変換して色補正版(final_export.mp4)を
+        作る（編集中の更新は変換なしで速いまま。ここだけ色補正）。"""
+        timeline = _load_json(work_dir / "timeline.json")
+        voiceover_path = timeline.get("voiceover_path")
+        jl_cut_offset = 0.2 if data.get("jl_cut") else 0.0
+        try:
+            render_timeline(timeline["cards"], materials_dir, work_dir / "final_export.mp4",
+                             voiceover_path, jl_cut_offset, hdr_fix=True)
+            self._send_json({"ok": True})
         except Exception as e:
             self._send_json({"ok": False, "error": str(e)})
 

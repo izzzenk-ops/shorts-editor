@@ -51,6 +51,39 @@ def quantize_durations(durations: list, fps: int = RENDER_FPS) -> list:
     return out
 
 
+# HLG/PQ等のHDR素材（iPhone HDR撮影）はBT.2020/HLGのままH.264にするとブラウザや
+# 一部プレイヤーで赤っぽくなる。書き出し時はHDR素材だけをBT.709 SDRに変換する
+# （SDR素材はそのまま＝混在でも各シーンが正しい色になる。プレビュー用プロキシは
+# 速度優先で変換しない）。色変換は縮小後にかけて軽くする（scale/crop→colorspace）。
+_HDR_CACHE = {}
+HDR_TO_SDR_VF = "colorspace=iall=bt2020:all=bt709:format=yuv420p"
+
+# 色補正モード。編集中の更新（render）はFalse（変換なし＝速い）。
+# 「動画出力」時だけTrueにして、HDR素材だけBT.709へ変換して書き出す。
+# 変換版は別キャッシュ(render_cache_export)に保存し、通常キャッシュと干渉させない。
+_HDR_FIX = False
+_CACHE_SUBDIR = "render_cache"
+
+
+def _is_hdr_source(clip_path: Path) -> bool:
+    key = str(clip_path)
+    if key in _HDR_CACHE:
+        return _HDR_CACHE[key]
+    hdr = False
+    try:
+        r = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=color_primaries,color_transfer",
+             "-of", "default=noprint_wrappers=1:nokey=1", str(clip_path)],
+            capture_output=True, text=True)
+        out = r.stdout.lower()
+        hdr = ("bt2020" in out) or ("arib-std-b67" in out) or ("smpte2084" in out)
+    except Exception:
+        hdr = False
+    _HDR_CACHE[key] = hdr
+    return hdr
+
+
 def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Path,
                   input_side_seek: bool) -> None:
     # setpts/asetpts でPTSを必ず0始まりに正規化する。入力側シークは目的の時刻の
@@ -59,8 +92,9 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
     # 連結すると後半ほどズレが蓄積する（実機で確認済み）。
     # fps=RENDER_FPSで固定フレームレート化する（VFRだとフレーム数換算が
     # ズレるため、後段のフレーム単位trimを正確にするのに必須）
+    cvt = f",{HDR_TO_SDR_VF}" if (_HDR_FIX and _is_hdr_source(clip_path)) else ""
     vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
-          f"crop={WIDTH}:{HEIGHT},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
+          f"crop={WIDTH}:{HEIGHT}{cvt},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
     af = "asetpts=PTS-STARTPTS"
     # -ar/-acで音声フォーマットを全セグメント共通に揃える。素材ごとにサンプル
     # レート・チャンネル数が違うと、後段のconcatデマルチプレクサ+-c copyで
@@ -399,7 +433,7 @@ def render_unit(unit_cards: list, unit_segments: list, materials_dir: Path,
     """1ユニットをキャッシュ確認のうえレンダーする（先頭カードに"title"が
     設定されていれば、build_caption_segmentsがその区間にタイトルを重ねて表示する）。
     戻り値: (mp4のパス, フィンガープリント, キャッシュヒットしたか)"""
-    cache_dir = Path(work_dir) / "render_cache"
+    cache_dir = Path(work_dir) / _CACHE_SUBDIR
     cache_dir.mkdir(parents=True, exist_ok=True)
     fp = fingerprint_unit(unit_cards, unit_segments, telop_color)
     cache_path = cache_dir / f"{fp}.mp4"
@@ -461,7 +495,7 @@ def _fingerprint_concat(unit_fingerprints: list) -> str:
 def _cleanup_render_cache(work_dir: Path, used_fingerprints: set):
     """今回参照されなかった古いキャッシュファイルを削除し、肥大化を防ぐ。
     _concat_*.mp4 はconcat側で管理するのでスキップする。"""
-    cache_dir = Path(work_dir) / "render_cache"
+    cache_dir = Path(work_dir) / _CACHE_SUBDIR
     if not cache_dir.exists():
         return
     for f in cache_dir.glob("*.mp4"):
@@ -473,7 +507,7 @@ def _cleanup_render_cache(work_dir: Path, used_fingerprints: set):
 
 def render_timeline(cards: list, materials_dir: Path, output_path: Path,
                      voiceover_path: Path = None, jl_cut_offset: float = 0.0,
-                     telop_color: str = None):
+                     telop_color: str = None, hdr_fix: bool = False):
     """カード単位（ユニット）でキャッシュしながらレンダーする（先頭カードに
     "title"が設定されていればその区間にタイトルを重ねて表示する。詳細は
     captions.build_caption_segments参照）。変更されていない
@@ -482,6 +516,12 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
     materials_dir = Path(materials_dir)
     output_path = Path(output_path)
     work_dir = output_path.parent
+
+    # 色補正モードの切替: 書き出し（hdr_fix=True）だけHDR素材をBT.709へ変換し、
+    # 変換版は別キャッシュ(render_cache_export)に貯める。編集中の更新は変換なしで速い。
+    global _HDR_FIX, _CACHE_SUBDIR
+    _HDR_FIX = hdr_fix
+    _CACHE_SUBDIR = "render_cache_export" if hdr_fix else "render_cache"
 
     # 未割当てカードのチェック（スキップして書き出すと映像が短くなり
     # 音声・テロップとズレた動画がサイレントに生成されてしまうため、先に止める）
@@ -589,7 +629,7 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
 
     # ユニット結合のキャッシュ: SFXのみの変更など、ユニットが一切変わっていない場合は
     # concat を再作成せずに再利用する（音声ミックスだけやり直せばよい）
-    render_cache_dir = Path(work_dir) / "render_cache"
+    render_cache_dir = Path(work_dir) / _CACHE_SUBDIR
     render_cache_dir.mkdir(parents=True, exist_ok=True)
     concat_fp = _fingerprint_concat(unit_fps)
     concat_cache_path = render_cache_dir / f"_concat_{concat_fp}.mp4"

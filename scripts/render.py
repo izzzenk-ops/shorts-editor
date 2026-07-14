@@ -56,7 +56,32 @@ def quantize_durations(durations: list, fps: int = RENDER_FPS) -> list:
 # （SDR素材はそのまま＝混在でも各シーンが正しい色になる。プレビュー用プロキシは
 # 速度優先で変換しない）。色変換は縮小後にかけて軽くする（scale/crop→colorspace）。
 _HDR_CACHE = {}
-HDR_TO_SDR_VF = "colorspace=iall=bt2020:all=bt709:format=yuv420p"
+_ZSCALE = None
+
+# HLG/PQ等のHDRをSDRへ変換するフィルタ。
+# zscale対応ffmpegがあれば、正しくlinear化→tonemap(hable)→BT.709する（正確）。
+# 無い環境（受講生等）は、colorspace近似＋curves/eqでそれっぽく補正する（フォールバック）。
+HDR_TO_SDR_ZSCALE = ("zscale=t=linear:npl=100,tonemap=hable:desat=0,"
+                     "zscale=t=bt709:m=bt709:p=bt709:r=tv,format=yuv420p")
+HDR_TO_SDR_APPROX = ("colorspace=iall=bt2020:all=bt709:format=yuv420p,"
+                     "curves=r='0/0 0.5/0.43 1/0.92':g='0/0 0.5/0.43 1/0.92':b='0/0 0.5/0.43 1/0.92',"
+                     "eq=saturation=1.22")
+
+
+def _has_zscale() -> bool:
+    global _ZSCALE
+    if _ZSCALE is None:
+        try:
+            r = subprocess.run(["ffmpeg", "-hide_banner", "-filters"],
+                               capture_output=True, text=True)
+            _ZSCALE = "zscale" in r.stdout
+        except Exception:
+            _ZSCALE = False
+    return _ZSCALE
+
+
+def _hdr_to_sdr_vf() -> str:
+    return HDR_TO_SDR_ZSCALE if _has_zscale() else HDR_TO_SDR_APPROX
 
 # 色補正モード。編集中の更新（render）はFalse（変換なし＝速い）。
 # 「動画出力」時だけTrueにして、HDR素材だけBT.709へ変換して書き出す。
@@ -92,7 +117,7 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
     # 連結すると後半ほどズレが蓄積する（実機で確認済み）。
     # fps=RENDER_FPSで固定フレームレート化する（VFRだとフレーム数換算が
     # ズレるため、後段のフレーム単位trimを正確にするのに必須）
-    cvt = f",{HDR_TO_SDR_VF}" if (_HDR_FIX and _is_hdr_source(clip_path)) else ""
+    cvt = f",{_hdr_to_sdr_vf()}" if (_HDR_FIX and _is_hdr_source(clip_path)) else ""
     vf = (f"scale={WIDTH}:{HEIGHT}:force_original_aspect_ratio=increase,"
           f"crop={WIDTH}:{HEIGHT}{cvt},setsar=1,fps={RENDER_FPS},setpts=PTS-STARTPTS")
     af = "asetpts=PTS-STARTPTS"

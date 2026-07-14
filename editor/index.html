@@ -683,6 +683,9 @@ function renderCards() {
           <div class="ctrl-row">
             ${cardFontHtml(card, i)}
           </div>
+          <div class="ctrl-row">
+            ${cardEffectHtml(card, i)}
+          </div>
         </div>
       </div>
       ${blocks || emptyClipHtml(i)}
@@ -1470,6 +1473,33 @@ function cardFontHtml(card, i) {
 
 function setCardFont(i, font) {
   cards[i].telop_font = font;
+  renderCards();
+  autosave();
+}
+
+// カット頭の強調演出（render.pyのeffectと対応）
+const TELOP_EFFECTS = [
+  { name: 'なし',         val: null },
+  { name: 'ズームパンチ', val: 'zoom_punch' },
+  { name: 'シェイク',     val: 'shake' },
+  { name: 'フラッシュ',   val: 'flash' },
+];
+
+function cardEffectHtml(card, i) {
+  const cur = card.effect || null;
+  const btns = TELOP_EFFECTS.map(e => {
+    const active = (cur || null) === (e.val || null);
+    return `<button onclick="setCardEffect(${i},${e.val ? `'${e.val}'` : 'null'})"
+      style="padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;
+      border:1px solid ${active ? 'var(--accent)' : 'var(--border-strong)'};
+      background:${active ? 'var(--accent-soft)' : 'var(--surface-3)'};color:var(--text)">${e.name}</button>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">頭の演出</span>${btns}</div>`;
+}
+
+function setCardEffect(i, val) {
+  cards[i].effect = val;
   renderCards();
   autosave();
 }

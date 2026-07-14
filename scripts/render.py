@@ -130,12 +130,16 @@ def extract_video_segment(clip_path: Path, in_point: float, duration: float, out
 
 
 def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list,
-                      output_path: Path, zoom_params: dict = None, overlay: dict = None):
-    """1ユニット分のセグメントをtrim+concat+ズーム+画像オーバーレイ+テロップ合成し、
+                      output_path: Path, zoom_params: dict = None, overlay: dict = None,
+                      effect: str = None):
+    """1ユニット分のセグメントをtrim+concat+ズーム+画像オーバーレイ+強調演出+テロップ合成し、
     自己完結したmp4を書き出す。zoom_params={'enabled':True,'level':20}のとき、カード全体に
     ゆっくりズームイン（Ken Burnsエフェクト）をかける。
     overlay={'path','scale','x','y'}のとき、映像の上に画像を重ねる（scale=横幅比0-1、
-    x/y=画像中心の位置0-1）。テロップより下のレイヤーに合成する。"""
+    x/y=画像中心の位置0-1）。テロップより下のレイヤーに合成する。
+    effect（カット頭の強調演出。テロップより下に適用）:
+      'zoom_punch' … 頭で一瞬ズームインしてすぐ戻る、'shake' … 頭で数フレーム揺れる、
+      'flash' … 頭で白フラッシュ。いずれもフレーム数は保つ（concat互換）。"""
     cmd = ["ffmpeg", "-nostdin", "-y"]
     for f in seg_files:
         cmd += ["-i", str(f)]
@@ -187,6 +191,29 @@ def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list
         stmts.append(f"[{ovl_idx}:v]scale={ovw}:-1[ovlimg]")
         stmts.append(f"[{v_label}][ovlimg]overlay=x='{ox:.4f}*W-w/2':y='{oy:.4f}*H-h/2'[vovl]")
         v_label = "vovl"
+
+    # カット頭の強調演出（テロップより下＝テロップは常にくっきり）。フレーム数は不変。
+    if effect == "zoom_punch":
+        # 頭8フレーム(~0.27s)で1.3倍から等倍へ一気に戻る「パンチイン」
+        stmts.append(
+            f"[{v_label}]zoompan=z='if(lte(on,8),1.3-0.3*on/8,1)'"
+            f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":d=1:fps={RENDER_FPS}:s={WIDTH}x{HEIGHT},format=yuv420p[veff]"
+        )
+        v_label = "veff"
+    elif effect == "shake":
+        # 1.06倍に拡大してから頭0.35sだけ揺らす（はみ出しぶんで揺れる余白を作る）
+        stmts.append(
+            f"[{v_label}]scale=iw*1.06:ih*1.06,"
+            f"crop={WIDTH}:{HEIGHT}"
+            f":x='(iw-ow)/2+if(lt(t,0.35),14*sin(t*80),0)'"
+            f":y='(ih-oh)/2+if(lt(t,0.35),14*cos(t*95),0)',format=yuv420p[veff]"
+        )
+        v_label = "veff"
+    elif effect == "flash":
+        # 頭0.15sの白フラッシュ（白から映像へフェードイン）
+        stmts.append(f"[{v_label}]fade=t=in:st=0:d=0.15:color=white[veff]")
+        v_label = "veff"
 
     prev = v_label
     for k, seg in enumerate(caption_segments):
@@ -383,6 +410,7 @@ def fingerprint_unit(unit_cards: list, unit_segments: list, telop_color: str = N
                    "telop_color": c.get("telop_color"), "telop_fontsize": c.get("telop_fontsize"),
                    "telop_font": c.get("telop_font"),
                    "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level"),
+                   "effect": c.get("effect"),
                    "overlay": c.get("overlay")} for c in unit_cards],
         "segments": [{"file": s["file"], "in": round(s["in"], 4), "frames": s["frames"]}
                      for s in unit_segments],
@@ -438,10 +466,11 @@ def render_unit(unit_cards: list, unit_segments: list, materials_dir: Path,
         # 失敗時に壊れた（0バイト/途中で切れた）mp4がcache_pathに残ると、次回それを
         # "完成済み"として再利用してしまい「moov atom not found」等の二次被害になる。
         # 一時ファイルに書き、成功時のみ同一ディレクトリでアトミックにリネームする。
+        effect = unit_cards[0].get("effect")
         tmp_out = cache_dir / f"{fp}.partial.mp4"
         try:
             render_unit_clip(seg_files, frame_counts, caption_segments, tmp_out,
-                             zoom_params, overlay_params)
+                             zoom_params, overlay_params, effect)
             os.replace(tmp_out, cache_path)
         except Exception:
             tmp_out.unlink(missing_ok=True)

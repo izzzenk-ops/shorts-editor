@@ -119,7 +119,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
 TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
-TELOP_STYLE_VERSION = "v17-box30-square"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
+TELOP_STYLE_VERSION = "v18-telop-effects"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
 def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int = 1920,
@@ -203,6 +203,41 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     img.save(out_path)
+    return img
+
+
+# カット頭のテロップ演出。映像は動かさず、テロップPNGだけをアニメーションさせる。
+# タイプライターと同じ「短時間ずつ差し替え表示」の仕組みで実現する。
+EFFECT_FRAMES = 8       # アニメのコマ数
+EFFECT_DUR = 0.30       # アニメの長さ（秒）。カードが短ければ尺の4割に収める
+
+
+def _apply_telop_effect(base_img, effect: str, k: int, n: int):
+    """ベースのテロップPNG(base_img)を、演出effectのkコマ目(全nコマ)に変換して返す。"""
+    from PIL import Image
+    import math
+    W, H = base_img.size
+    p = k / max(1, n - 1)  # 0→1
+    if effect == "zoom_punch":
+        scale = 1.0 + 0.30 * (1 - p)  # 1.30倍→等倍
+        if scale <= 1.001:
+            return base_img
+        sw, sh = round(W * scale), round(H * scale)
+        scaled = base_img.resize((sw, sh), Image.LANCZOS)
+        left, top = (sw - W) // 2, (sh - H) // 2
+        return scaled.crop((left, top, left + W, top + H))
+    if effect == "shake":
+        amp = 18 * (1 - p)  # 揺れ幅が減衰
+        dx = round(amp * math.sin(k * 1.9))
+        dy = round(amp * math.cos(k * 2.3))
+        canvas = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        canvas.alpha_composite(base_img, (dx, dy))
+        return canvas
+    if effect == "flash":
+        # 点滅（2コマ単位でon/off）。最後の2コマは必ずonにして点灯で終わる
+        visible = (k >= n - 2) or ((k // 2) % 2 == 0)
+        return base_img if visible else Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    return base_img
 
 
 def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float = CHAR_INTERVAL_S,
@@ -275,8 +310,27 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
     for card in cards[start_idx:]:
         card_style = style_for(card)
         png_path = captions_dir / f"card_{card['id']:03d}.png"
-        render_text_png(wrap_text(card["text"], card_style), png_path, style=card_style)
-        segments.append({"path": str(png_path), "start": card["start"], "end": card["end"]})
+        base_img = render_text_png(wrap_text(card["text"], card_style), png_path, style=card_style)
+
+        effect = card.get("effect")
+        card_dur = card["end"] - card["start"]
+        if effect and card_dur > 0.15:
+            # カット頭でテロップ文字をアニメーション（映像は動かさない）。
+            # 各コマを短時間ずつ差し替え表示→残り時間は静止のベースPNG。
+            anim_dur = min(EFFECT_DUR, card_dur * 0.4)
+            n = EFFECT_FRAMES
+            interval = anim_dur / n
+            t = card["start"]
+            for k in range(n):
+                frame_img = _apply_telop_effect(base_img, effect, k, n)
+                fpath = captions_dir / f"card_{card['id']:03d}_eff{k:02d}.png"
+                frame_img.save(fpath)
+                seg_end = round(t + interval, 4)
+                segments.append({"path": str(fpath), "start": round(t, 4), "end": seg_end})
+                t = seg_end
+            segments.append({"path": str(png_path), "start": round(t, 4), "end": card["end"]})
+        else:
+            segments.append({"path": str(png_path), "start": card["start"], "end": card["end"]})
 
     return segments
 

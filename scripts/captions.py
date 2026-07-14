@@ -26,6 +26,23 @@ os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
 FONT_PATH = "/System/Library/Fonts/ヒラギノ角ゴシック W7.ttc"  # burn.pyと同じ
 FONT_INDEX = 0
 
+# テロップに使えるフォント（表示名 → (パス, ttc内index)）。既定は角ゴ太字（従来のW7）。
+# card["telop_font"] にこの表示名が入る。ファイルが無い環境では既定にフォールバックする。
+FONTS = {
+    "角ゴ標準": ("/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc", 2),
+    "角ゴ太字": (FONT_PATH, FONT_INDEX),
+    "丸ゴ": ("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", 1),
+    "明朝": ("/System/Library/Fonts/ヒラギノ明朝 ProN.ttc", 2),
+}
+
+
+def resolve_font(name):
+    """テロップフォント名 → (パス, index)。未指定/不明/ファイル無しは既定(角ゴ太字)。"""
+    path, index = FONTS.get(name or "", (FONT_PATH, FONT_INDEX))
+    if not os.path.exists(path):
+        return FONT_PATH, FONT_INDEX
+    return path, index
+
 SCRIPTS_DIR = Path(__file__).parent
 _VENDOR = SCRIPTS_DIR / "_vendor"
 sys.path.insert(0, str(_VENDOR))
@@ -43,10 +60,12 @@ _font_cache = {}
 
 
 def _get_font(style: dict):
-    key = (style["fontsize"],)
+    fp = style.get("font_path", FONT_PATH)
+    fi = style.get("font_index", FONT_INDEX)
+    key = (style["fontsize"], fp, fi)
     if key not in _font_cache:
         from PIL import ImageFont
-        _font_cache[key] = ImageFont.truetype(FONT_PATH, style["fontsize"], index=FONT_INDEX)
+        _font_cache[key] = ImageFont.truetype(fp, style["fontsize"], index=fi)
     return _font_cache[key]
 
 
@@ -114,7 +133,9 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     # style未指定のときはプリセットの70ではなくTELOP_FONTSIZEを既定にする。
     fontsize = base_style.get("fontsize", TELOP_FONTSIZE) if style is not None else TELOP_FONTSIZE
     effective_style = {**base_style, "fontsize": fontsize}
-    font = ImageFont.truetype(FONT_PATH, fontsize, index=FONT_INDEX)
+    fp = effective_style.get("font_path", FONT_PATH)
+    fi = effective_style.get("font_index", FONT_INDEX)
+    font = ImageFont.truetype(fp, fontsize, index=fi)
 
     text_rgb = _hex_to_rgb(effective_style["color"])
     shadow_rgb = _hex_to_rgb(effective_style["shadow_color"])
@@ -191,6 +212,9 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
         fs = card.get("telop_fontsize")
         if fs:
             s["fontsize"] = fs
+        fp, fi = resolve_font(card.get("telop_font"))
+        s["font_path"] = fp
+        s["font_index"] = fi
         return s
 
     segments = []

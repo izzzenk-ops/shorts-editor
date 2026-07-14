@@ -680,6 +680,9 @@ function renderCards() {
             ${cardColorPickerHtml(card, i)}
             ${cardFontSizeHtml(card, i)}
           </div>
+          <div class="ctrl-row">
+            ${cardFontHtml(card, i)}
+          </div>
         </div>
       </div>
       ${blocks || emptyClipHtml(i)}
@@ -1445,6 +1448,28 @@ function cardFontSizeHtml(card, i) {
 
 function setCardFontSize(i, size) {
   cards[i].telop_fontsize = size;
+  renderCards();
+  autosave();
+}
+
+// カード個別のテロップフォント（既定=角ゴ太字。captions.pyのFONTSと対応）
+const TELOP_FONTS = ['角ゴ標準', '角ゴ太字', '丸ゴ', '明朝'];
+
+function cardFontHtml(card, i) {
+  const cur = card.telop_font || '角ゴ太字';
+  const btns = TELOP_FONTS.map(f => {
+    const active = cur === f;
+    return `<button onclick="setCardFont(${i},'${f}')"
+      style="padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;
+      border:1px solid ${active ? 'var(--accent)' : 'var(--border-strong)'};
+      background:${active ? 'var(--accent-soft)' : 'var(--surface-3)'};color:var(--text)">${f}</button>`;
+  }).join('');
+  return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+    <span style="font-size:11px;color:var(--text-muted)">フォント</span>${btns}</div>`;
+}
+
+function setCardFont(i, font) {
+  cards[i].telop_font = font;
   renderCards();
   autosave();
 }

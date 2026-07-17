@@ -1,4 +1,4 @@
-# reel-henshu-afreco セットアップ（Windows / PowerShell）
+﻿# reel-henshu-afreco セットアップ（Windows / PowerShell）
 # 使い方: PowerShellで  .\install.ps1
 #   実行がブロックされる場合:  powershell -ExecutionPolicy Bypass -File .\install.ps1
 # ※Windows実機での動作確認が必要（Macでは検証不可）。

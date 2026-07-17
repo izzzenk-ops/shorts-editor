@@ -278,7 +278,7 @@ def concat_units_copy(unit_files: list, output_path: Path):
     済みなので、-c copyでも安全に結合できる（実機で確認済み）。"""
     with tempfile.TemporaryDirectory() as tmpdir:
         list_path = Path(tmpdir) / "concat_list.txt"
-        with open(list_path, "w") as f:
+        with open(list_path, "w", encoding="utf-8") as f:
             for uf in unit_files:
                 # concatデマルチプレクサは相対パスをリストファイル自身の
                 # ディレクトリ基準で解決するため、呼び出し元のcwdに関わらず

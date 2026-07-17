@@ -84,11 +84,25 @@ def transcribe_ja(audio_path):
 _encoder_cache = None
 
 
+def _encoder_actually_works(args: list) -> bool:
+    """一覧に名前があるだけでなく、実際に1フレーム吐けるかを確認する
+    （ドライバ未導入のnvenc/qsv/amfが名前だけ存在するケースがあるため）。"""
+    import subprocess
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error",
+           "-f", "lavfi", "-i", "color=c=black:s=64x64:d=0.1",
+           *args, "-frames:v", "1", "-f", "null", "-"]
+    try:
+        return subprocess.run(cmd, capture_output=True, timeout=15).returncode == 0
+    except Exception:
+        return False
+
+
 def video_encoder():
     """H.264エンコーダのffmpeg引数リストを返す。
 
     Mac: h264_videotoolbox（従来通り・不変）。
-    Windows/Linux: 使えるHWエンコーダ（nvenc→qsv→amf）を検出、無ければlibx264。
+    Windows/Linux: 使えるHWエンコーダ（nvenc→qsv→amf）を実際に1フレーム
+    エンコードして検証し、動くものを採用。無ければlibx264。
     """
     global _encoder_cache
     if _encoder_cache is not None:
@@ -102,15 +116,19 @@ def video_encoder():
                                capture_output=True, text=True).stdout
     except Exception:
         avail = ""
+    candidates = []
     if "h264_nvenc" in avail:        # NVIDIA
-        _encoder_cache = ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23"]
-    elif "h264_qsv" in avail:        # Intel Quick Sync
-        _encoder_cache = ["-c:v", "h264_qsv", "-global_quality", "23"]
-    elif "h264_amf" in avail:        # AMD
-        _encoder_cache = ["-c:v", "h264_amf", "-rc", "cqp",
-                          "-qp_i", "23", "-qp_p", "23"]
-    else:                            # ソフトウェア（どこでも動く）
-        _encoder_cache = ["-c:v", "libx264", "-crf", "20", "-preset", "medium"]
+        candidates.append(["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23"])
+    if "h264_qsv" in avail:          # Intel Quick Sync
+        candidates.append(["-c:v", "h264_qsv", "-global_quality", "23"])
+    if "h264_amf" in avail:          # AMD
+        candidates.append(["-c:v", "h264_amf", "-rc", "cqp",
+                          "-qp_i", "23", "-qp_p", "23"])
+    for cand in candidates:
+        if _encoder_actually_works(cand):
+            _encoder_cache = cand
+            return list(_encoder_cache)
+    _encoder_cache = ["-c:v", "libx264", "-crf", "20", "-preset", "medium"]
     return list(_encoder_cache)
 
 

@@ -81,7 +81,7 @@ def detect_silence(path: Path, noise_db: float, min_sec: float) -> list:
         ["ffmpeg", "-i", str(path),
          "-af", f"silencedetect=noise={noise_db}dB:d={min_sec}",
          "-f", "null", "-"],
-        capture_output=True, text=True
+        capture_output=True, text=True, encoding="utf-8", errors="replace"
     )
     starts = [float(x) for x in re.findall(r"silence_start: ([\d.]+)", result.stderr)]
     ends   = [float(x) for x in re.findall(r"silence_end: ([\d.]+)",   result.stderr)]
@@ -156,7 +156,7 @@ def extract_segments(input_path: Path, segments: list, tmpdir: str, is_video: bo
 def concat_segments(seg_files: list, output_path: Path, tmpdir: str):
     """セグメントをconcatデムクサーで結合する"""
     list_file = os.path.join(tmpdir, "concat.txt")
-    with open(list_file, "w") as f:
+    with open(list_file, "w", encoding="utf-8") as f:
         for seg in seg_files:
             f.write(f"file '{seg}'\n")
 

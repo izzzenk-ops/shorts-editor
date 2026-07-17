@@ -16,6 +16,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
 
+if hasattr(sys.stdout, "reconfigure"):  # Windowsのcp932コンソールで絵文字printが落ちるのを防ぐ
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 if os.path.isdir("/opt/homebrew/bin"):  # Macのみ（Windows/Linuxは既存PATHのffmpegを使う）
     os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
 

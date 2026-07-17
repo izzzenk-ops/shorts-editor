@@ -17,6 +17,10 @@ import re
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, "reconfigure"):  # Windowsのcp932コンソールで絵文字printが落ちるのを防ぐ
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).parent))
 from extract_frames import extract_frames_for_materials, list_materials  # noqa: E402
 

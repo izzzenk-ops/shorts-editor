@@ -1,4 +1,4 @@
-# shorts-editor 起動（Windows / PowerShell）
+# reel-henshu-afreco 起動（Windows / PowerShell）
 # 使い方: .\start.ps1 <プロジェクト名>
 # ※Windows移植ブリーフに沿って作成。Windows実機での動作確認が必要。
 param([Parameter(Mandatory = $true)][string]$Project)

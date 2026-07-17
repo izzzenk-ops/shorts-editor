@@ -5,7 +5,7 @@ REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
 VENV_DIR="$REPO_DIR/venv"
 
 echo "================================================"
-echo "  shorts-editor セットアップ"
+echo "  reel-henshu-afreco セットアップ"
 echo "================================================"
 echo ""
 

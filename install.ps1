@@ -1,4 +1,4 @@
-# shorts-editor セットアップ（Windows / PowerShell）
+# reel-henshu-afreco セットアップ（Windows / PowerShell）
 # 使い方: PowerShellで  .\install.ps1
 # ※このスクリプトはWindows移植ブリーフに沿って作成。Windows実機での動作確認が必要。
 $ErrorActionPreference = "Stop"
@@ -6,7 +6,7 @@ $RepoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Venv = Join-Path $RepoDir "venv"
 
 Write-Host "================================================"
-Write-Host "  shorts-editor セットアップ（Windows）"
+Write-Host "  reel-henshu-afreco セットアップ（Windows）"
 Write-Host "================================================"
 
 # 1. ffmpeg の確認（Windowsは同梱せず、PATH上のffmpegを使う）

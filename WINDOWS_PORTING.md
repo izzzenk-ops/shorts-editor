@@ -1,6 +1,6 @@
 # Windows移植ブリーフ（Claude Code向け指示書）
 
-このツール `shorts-editor` は現在 macOS 専用です。これを **Windows でも動く**ように移植します。
+このツール `reel-henshu-afreco` は現在 macOS 専用です。これを **Windows でも動く**ように移植します。
 このファイルは、Windows機で作業する Claude Code への指示書です。**下のルールを必ず守って**進めてください。
 
 ---

@@ -30,8 +30,8 @@ WORK_ROOT = REPO_ROOT / "work"
 # config.json で上書き可能（インストール後に各自設定）
 _config_path = REPO_ROOT / "config.json"
 _config = json.loads(_config_path.read_text(encoding="utf-8")) if _config_path.exists() else {}
-_sound = _config.get("sound_dir") or (Path.home() / "shorts-editor" / "sounds")
-SOUND_DIR = Path(_sound).expanduser()  # 空/未設定なら各自の ~/shorts-editor/sounds
+_sound = _config.get("sound_dir") or (Path.home() / "reel-henshu-afreco" / "sounds")
+SOUND_DIR = Path(_sound).expanduser()  # 空/未設定なら各自の ~/reel-henshu-afreco/sounds
 
 sys.path.insert(0, str(SCRIPTS_DIR))
 from assign_clips import (  # noqa: E402
@@ -304,7 +304,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
             frames = clip["frames"]
             frame = frames[min(n, len(frames) - 1)]
-            # framesは[{"path","t"}]。pathは~/shorts-editorからの相対
+            # framesは[{"path","t"}]。pathは~/reel-henshu-afrecoからの相対
             frame_path = (SCRIPTS_DIR.parent / frame["path"]).resolve()
             if not frame_path.exists():
                 self.send_response(404)

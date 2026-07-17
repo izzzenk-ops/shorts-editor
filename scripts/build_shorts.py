@@ -21,7 +21,7 @@ from pacing import build_cards_from_voiceover  # noqa: E402
 from render import render_timeline  # noqa: E402
 from tag_materials import load_materials  # noqa: E402
 
-WORK_ROOT = Path.home() / "shorts-editor" / "work"
+WORK_ROOT = Path.home() / "reel-henshu-afreco" / "work"
 
 
 def fmt_time(sec: float) -> str:

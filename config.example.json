@@ -1,4 +1,4 @@
 {
-  "_comment": "このファイルを config.json にコピーして各自の環境に合わせて設定します（config.json は配布対象外・各自ローカル）。sound_dir を空 or 未設定にすると、既定の ~/shorts-editor/sounds を使います。効果音は別途配布のものをそのフォルダに置いてください。",
+  "_comment": "このファイルを config.json にコピーして各自の環境に合わせて設定します（config.json は配布対象外・各自ローカル）。sound_dir を空 or 未設定にすると、既定の ~/reel-henshu-afreco/sounds を使います。効果音は別途配布のものをそのフォルダに置いてください。",
   "sound_dir": ""
 }

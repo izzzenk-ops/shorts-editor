@@ -1,3 +1,9 @@
-mlx-whisper
+# 文字起こしエンジンはOSで出し分け（環境マーカー）
+# Apple Silicon Mac → mlx-whisper（Metal・高速・従来通り）
+mlx-whisper; sys_platform == "darwin" and platform_machine == "arm64"
+# それ以外（Windows / Linux / Intel Mac）→ faster-whisper
+faster-whisper; sys_platform != "darwin" or platform_machine != "arm64"
+# HEIC画像の読み込み（WindowsはsipsがないためPythonで変換）
+pillow-heif; sys_platform == "win32"
 Pillow
 janome

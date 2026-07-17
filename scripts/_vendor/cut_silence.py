@@ -20,7 +20,8 @@ import tempfile
 from pathlib import Path
 
 # Homebrew PATH を確保
-os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+if os.path.isdir("/opt/homebrew/bin"):  # Macのみ（Windows/Linuxは既存PATHのffmpegを使う）
+    os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
 
 # ── デフォルト設定 ─────────────────────────────────────────
 NOISE_DB    = -30    # 無音判定の閾値（dB）

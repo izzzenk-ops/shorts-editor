@@ -21,7 +21,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+if os.path.isdir("/opt/homebrew/bin"):  # Macのみ（Windows/Linuxは既存PATHのffmpegを使う）
+    os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+
+from platform_utils import video_encoder, fonts as _platform_fonts  # noqa: E402
 
 FONT_PATH = "/System/Library/Fonts/ヒラギノ角ゴシック W7.ttc"  # burn.pyと同じ
 FONT_INDEX = 0
@@ -34,6 +37,12 @@ FONTS = {
     "丸ゴ": ("/System/Library/Fonts/ヒラギノ丸ゴ ProN W4.ttc", 1),
     "明朝": ("/System/Library/Fonts/ヒラギノ明朝 ProN.ttc", 2),
 }
+
+# Windows等では platform_utils のOS別フォントで上書き（Macは上の既存値のまま＝無改変）
+_pf = _platform_fonts()
+if _pf:
+    FONTS = _pf
+    FONT_PATH, FONT_INDEX = _pf.get("角ゴ太字", (FONT_PATH, FONT_INDEX))
 
 
 def resolve_font(name):
@@ -379,7 +388,7 @@ def burn_captions(video_path: Path, segments: list, output_path: Path):
         "-filter_complex", filter_complex,
         "-map", f"[{prev_label}]",
         "-map", "0:a?",
-        "-c:v", "h264_videotoolbox", "-q:v", "65",
+        *video_encoder(),
         "-c:a", "copy",
         str(output_path),
     ]

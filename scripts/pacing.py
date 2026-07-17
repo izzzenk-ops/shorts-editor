@@ -106,12 +106,9 @@ def build_cards_from_voiceover(voiceover_path: Path, work_dir: Path) -> tuple:
     cut_path = cut_voiceover_silence(Path(voiceover_path), Path(work_dir))
     total_duration = get_duration(cut_path)
 
-    import mlx_whisper
+    from platform_utils import transcribe_ja
     print("  文字起こし中（Whisper）...")
-    result = mlx_whisper.transcribe(
-        str(cut_path), path_or_hf_repo=WHISPER_MODEL,
-        language="ja", word_timestamps=True, verbose=False,
-    )
+    result = transcribe_ja(cut_path)
 
     _WHISPER_HALLUCINATIONS = {
         "ご視聴ありがとうございました",
@@ -266,12 +263,9 @@ def apply_pacing_with_voiceover(cards: list, voiceover_path: Path, work_dir: Pat
     total_duration = get_duration(cut_path)
 
     try:
-        import mlx_whisper
+        from platform_utils import transcribe_ja
         print("  文字起こし中（Whisper）...")
-        result = mlx_whisper.transcribe(
-            str(cut_path), path_or_hf_repo=WHISPER_MODEL,
-            language="ja", word_timestamps=True, verbose=False,
-        )
+        result = transcribe_ja(cut_path)
         ref_chars = flatten_to_chars(result)
         if not ref_chars:
             raise RuntimeError("文字起こし結果が空でした")

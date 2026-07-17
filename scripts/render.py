@@ -26,7 +26,10 @@ from cut_silence import get_duration  # noqa: E402
 sys.path.insert(0, str(Path(__file__).parent))
 from captions import build_caption_segments, TELOP_STYLE_VERSION  # noqa: E402
 
-os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+if os.path.isdir("/opt/homebrew/bin"):  # Macのみ（Windows/Linuxは既存PATHのffmpegを使う）
+    os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+
+from platform_utils import video_encoder  # noqa: E402  OS別エンコーダ
 
 WIDTH, HEIGHT = 1080, 1920
 RENDER_FPS = 30
@@ -130,7 +133,7 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
         # だけなので高速。in点が深い（数十〜数百秒）素材でも一瞬で抽出できる。
         cmd = ["ffmpeg", "-nostdin", "-y", "-ss", f"{in_point:.4f}", "-i", str(clip_path),
                "-t", f"{duration:.4f}", "-vf", vf, "-af", af,
-               "-c:v", "h264_videotoolbox", "-q:v", "65", *audio_args,
+               *video_encoder(), *audio_args,
                str(out_path)]
     else:
         # 出力側シーク（-ssを-iの後）: 全フレームを先頭からデコードするため遅いが、
@@ -138,7 +141,7 @@ def _run_extract(clip_path: Path, in_point: float, duration: float, out_path: Pa
         # （入力側シークだと0フレームの空ファイルになることがあるためのフォールバック）
         cmd = ["ffmpeg", "-nostdin", "-y", "-i", str(clip_path), "-ss", f"{in_point:.4f}",
                "-t", f"{duration:.4f}", "-vf", vf, "-af", af,
-               "-c:v", "h264_videotoolbox", "-q:v", "65", *audio_args,
+               *video_encoder(), *audio_args,
                "-avoid_negative_ts", "make_zero",
                str(out_path)]
     subprocess.run(cmd, capture_output=True, check=True)
@@ -162,7 +165,7 @@ def _run_extract_image(image_path: Path, duration: float, out_path: Path):
            "-f", "lavfi", "-t", f"{duration:.4f}", "-i", "anullsrc=r=48000:cl=stereo",
            "-map", "0:v", "-map", "1:a",
            "-vf", vf,
-           "-c:v", "h264_videotoolbox", "-q:v", "65",
+           *video_encoder(),
            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
            str(out_path)]
     subprocess.run(cmd, capture_output=True, check=True)
@@ -260,7 +263,7 @@ def render_unit_clip(seg_files: list, frame_counts: list, caption_segments: list
 
     filter_complex = ";".join(stmts)
     cmd += ["-filter_complex", filter_complex, "-map", f"[{prev}]", "-map", f"[{a_label}]",
-            "-c:v", "h264_videotoolbox", "-q:v", "65",
+            *video_encoder(),
             "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
             str(output_path)]
     subprocess.run(cmd, capture_output=True, check=True)

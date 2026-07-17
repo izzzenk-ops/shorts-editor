@@ -13,7 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
+if os.path.isdir("/opt/homebrew/bin"):  # Macのみ（Windows/Linuxは既存PATHのffmpegを使う）
+    os.environ["PATH"] = "/opt/homebrew/bin:" + os.environ.get("PATH", "")
 
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".avi", ".mkv"}
 

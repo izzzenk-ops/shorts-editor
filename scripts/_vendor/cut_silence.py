@@ -97,11 +97,20 @@ def calc_speech_segments(silences: list, duration: float, pad: float) -> list:
     """
     無音区間の逆（発話区間）を計算する。
     パディングを付けて「少し間を残す」ようにする。
+
+    録音末尾は声が尻すぼみに小さくなりやすく、最後に検出された無音区間は実際には
+    無音ではなく小声のセリフを誤検出していることがある（Windows実機で確認: 閾値を
+    -30dB〜-70dBに変えてもその区間だけ無音判定から外れず、区間内の音量ピークは
+    通常の発話とほぼ同レベルだった）。カットすると最後のセリフがほぼ消えるため、
+    最後に検出された無音区間はカット対象にせず発話区間に含める（実測では末尾の
+    無音は0.3〜0.9秒しかなく、残っても+0.2〜0.7秒で実害がないことを確認済み）。
     """
     segments = []
     pos = 0.0
 
-    for s_start, s_end in silences:
+    cut_silences = silences[:-1] if silences else []
+
+    for s_start, s_end in cut_silences:
         # 発話区間の終端 = 無音開始 + padding（少し余裕を持たせる）
         seg_end = s_start + pad
         if seg_end > pos + 0.05:  # 50ms以上あればセグメントとして確定
@@ -109,7 +118,7 @@ def calc_speech_segments(silences: list, duration: float, pad: float) -> list:
         # 次の発話区間の開始 = 無音終了 - padding（少し前から始める）
         pos = max(0.0, s_end - pad)
 
-    # 最後の発話区間
+    # 最後の発話区間（末尾の無音判定区間もここに含めて丸ごと残す）
     if pos < duration - 0.05:
         segments.append((pos, duration))
 

@@ -298,7 +298,17 @@ def concat_units_copy(unit_files: list, output_path: Path):
             raise
 
 
-SOUND_DIR = Path.home() / "Documents/Claude/Projects/動画編集/サウンド"
+def _load_sound_dir() -> Path:
+    """効果音フォルダは config.json の sound_dir を読む（editor_server.pyの一覧表示と
+    同じ設定を共有する）。固定パスにしていたため、エディタで選んだ効果音が書き出しに
+    反映されないバグがあった。未設定ならリポジトリ同梱の sounds/ にフォールバック。"""
+    config_path = Path(__file__).parent.parent / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8")) if config_path.exists() else {}
+    sound_dir = config.get("sound_dir") or (Path(__file__).parent.parent / "sounds")
+    return Path(sound_dir).expanduser()
+
+
+SOUND_DIR = _load_sound_dir()
 
 
 def mux_voiceover(video_path: Path, voiceover_path: Path, output_path: Path,

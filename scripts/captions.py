@@ -127,7 +127,7 @@ def _reveal_lines(sublines: list, k: int) -> list:
 
 
 TELOP_FONTSIZE = 45  # フォントサイズ（標準）
-TELOP_Y_OFFSET = round(2.5 * TELOP_FONTSIZE)  # 中央から下方向へのオフセット（2.5行分）
+TELOP_Y_OFFSET_LINES = 2.5  # 中央から下方向へのオフセット（フォントサイズの何行分か）。0で画面中央
 TELOP_STYLE_VERSION = "v20-telop-effects-bigger"  # テロップスタイルが変わるたびに更新→キャッシュ自動無効化
 
 
@@ -162,7 +162,7 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     elif alignment == 8:
         y_start = margin_v
     else:
-        y_start = (height - total_h) // 2 + round(2.5 * fontsize)
+        y_start = (height - total_h) // 2 + round(TELOP_Y_OFFSET_LINES * fontsize)
 
     box_mode = bool(effective_style.get("box"))
 

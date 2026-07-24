@@ -308,8 +308,13 @@ class Handler(BaseHTTPRequestHandler):
                 return
             frames = clip["frames"]
             frame = frames[min(n, len(frames) - 1)]
-            # framesは[{"path","t"}]。pathは~/reel-henshu-afrecoからの相対
+            # framesは[{"path","t"}]。pathは~/reel-henshu-afrecoからの相対。
+            # 古いmaterials.jsonには絶対パスが入っていることがあり、リポジトリの
+            # フォルダを移動・改名すると指す先が消える。その場合は同名ファイルを
+            # プロジェクトのframes/内から探して自動復旧する（voiceoverと同じ方針）。
             frame_path = (SCRIPTS_DIR.parent / frame["path"]).resolve()
+            if not frame_path.exists():
+                frame_path = work_dir / "frames" / Path(frame["path"]).name
             if not frame_path.exists():
                 self.send_response(404)
                 self.end_headers()
@@ -572,6 +577,11 @@ def main():
         sys.exit(1)
 
     materials_dir = Path(_load_json(materials_path)["materials_dir"])
+    # 記録された素材フォルダが無い場合（リポジトリの移動・改名等）、素材を
+    # work_dir内に置く構成ならそこから自動復旧する（voiceover・framesと同じ方針）。
+    if not materials_dir.exists() and (work_dir / "materials").exists():
+        materials_dir = work_dir / "materials"
+        print(f"ℹ️ 素材フォルダを自動復旧: {materials_dir}")
 
     def _prewarm_proxies():
         # h264_videotoolbox（ハードウェアエンコーダ）は共有資源で、並列化すると

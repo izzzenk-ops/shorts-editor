@@ -162,7 +162,12 @@ def render_text_png(lines: list, out_path: Path, width: int = 1080, height: int 
     elif alignment == 8:
         y_start = margin_v
     else:
-        y_start = (height - total_h) // 2 + round(TELOP_Y_OFFSET_LINES * fontsize)
+        # 縦位置: エディタのスライダーで調整した値（中央からのpx）があればそれを使う。
+        # 未調整のカードは従来どおりフォントサイズ基準（2.5行分下）で既存の見た目を保つ。
+        y_off = effective_style.get("y_offset")
+        if y_off is None:
+            y_off = round(TELOP_Y_OFFSET_LINES * fontsize)
+        y_start = (height - total_h) // 2 + int(y_off)
 
     box_mode = bool(effective_style.get("box"))
 
@@ -295,6 +300,9 @@ def build_caption_segments(cards: list, work_dir: Path, char_interval_s: float =
         s["font_index"] = fi
         if card.get("telop_box"):
             s["box"] = True
+        ty = card.get("telop_y")
+        if ty is not None:
+            s["y_offset"] = ty      # エディタのスライダーで調整した縦位置（中央からのpx）
         return s
 
     segments = []

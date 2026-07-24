@@ -687,6 +687,7 @@ function renderCards() {
         <div class="ctrl-row">
           ${cardBoxHtml(card, i)}
           ${cardEffectHtml(card, i)}
+          ${cardTelopYHtml(card, i)}
         </div>
         <div class="ctrl-row">
           ${cardOverlayHtml(card, i)}
@@ -1525,6 +1526,46 @@ function cardBoxHtml(card, i) {
 
 function setCardBox(i, v) {
   cards[i].telop_box = v;
+  renderCards();
+  autosave();
+}
+
+// ── テロップの縦位置（中央からのpx。captions.pyのy_offsetと対応）──────────
+// 未調整のカードは captions.py と同じ既定値（フォントサイズ×2.5行分）を表示する。
+function telopYOf(card) {
+  if (card.telop_y !== undefined && card.telop_y !== null) return card.telop_y;
+  return Math.round(2.5 * (card.telop_fontsize || 45));
+}
+
+function cardTelopYHtml(card, i) {
+  const cur = telopYOf(card);
+  return `<div style="display:flex;align-items:center;gap:6px">
+    <span style="font-size:11px;color:var(--text-muted)">縦位置</span>
+    <input type="range" min="-700" max="700" step="10" value="${cur}" style="width:90px"
+      oninput="setCardTelopY(${i}, this.value)" title="上下にドラッグしてテロップの高さを調整（0で画面中央）">
+    <span id="telopY${i}" style="font-size:11px;color:var(--text-muted);min-width:38px">${cur}</span>
+    <button onclick="applyTelopYToAll(${i})" title="この縦位置を全カードに適用"
+      style="padding:2px 8px;font-size:11px;border-radius:4px;cursor:pointer;
+      border:1px solid var(--border-strong);background:var(--surface-3);color:var(--text)">全カードへ</button>
+  </div>`;
+}
+
+function setCardTelopY(i, val) {
+  cards[i].telop_y = Number(val);
+  const label = document.getElementById(`telopY${i}`);   // ドラッグ中は再描画せず数値だけ更新
+  if (label) label.textContent = val;
+  scheduleTelopYSave();
+}
+
+let _telopYSaveTimer = null;
+function scheduleTelopYSave() {
+  clearTimeout(_telopYSaveTimer);
+  _telopYSaveTimer = setTimeout(() => autosave(), 400);
+}
+
+function applyTelopYToAll(i) {
+  const v = telopYOf(cards[i]);
+  cards.forEach(c => { c.telop_y = v; });
   renderCards();
   autosave();
 }

@@ -456,6 +456,7 @@ def fingerprint_unit(unit_cards: list, unit_segments: list, telop_color: str = N
                    "title_typewriter": c.get("title_typewriter", True),
                    "telop_color": c.get("telop_color"), "telop_fontsize": c.get("telop_fontsize"),
                    "telop_font": c.get("telop_font"), "telop_box": c.get("telop_box"),
+                   "telop_y": c.get("telop_y"),
                    "zoom": c.get("zoom"), "zoom_level": c.get("zoom_level"),
                    "effect": c.get("effect"),
                    "overlay": c.get("overlay")} for c in unit_cards],
@@ -583,11 +584,18 @@ def render_timeline(cards: list, materials_dir: Path, output_path: Path,
         )
 
     # アフレコ音声の存在チェック（移動・削除されていたら分かりやすく報告する）
+    # timeline.jsonには絶対パスが記録されるため、リポジトリのフォルダ名を変えると
+    # 既存プロジェクトが全部再書き出しできなくなる。同じファイル名がプロジェクトの
+    # work_dir内にあればそれを使って自動復旧する。
     if voiceover_path and not Path(voiceover_path).exists():
-        raise RuntimeError(
-            f"アフレコ音声が見つかりません: {voiceover_path}"
-            "。ファイルを移動・削除した場合は元に戻すか、プロジェクトを作り直してください。"
-        )
+        recovered = Path(work_dir) / Path(voiceover_path).name
+        if recovered.exists():
+            voiceover_path = str(recovered)
+        else:
+            raise RuntimeError(
+                f"アフレコ音声が見つかりません: {voiceover_path}"
+                "。ファイルを移動・削除した場合は元に戻すか、プロジェクトを作り直してください。"
+            )
 
     segments_to_cut = _flatten_segments(cards, materials_dir, jl_cut_offset)
     if not segments_to_cut:
